@@ -1,0 +1,11 @@
+{
+  "name": "kesehatan-mental-app",
+  "version": "1.0.0",
+  "description": "Aplikasi web statis untuk check-in kesehatan mental, latihan napas, dan jurnal refleksi.",
+  "private": true,
+  "scripts": {
+    "start": "python3 -m http.server 4173",
+    "check": "python3 scripts/check_static.py"
+  },
+  "devDependencies": {}
+}

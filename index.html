@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="id">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="Aplikasi kesehatan mental untuk check-in suasana hati, latihan napas, jurnal, dan rencana perawatan diri."
+    />
+    <title>Ruang Tenang | Kesehatan Mental</title>
+    <link rel="stylesheet" href="src/styles.css" />
+  </head>
+  <body>
+    <main>
+      <section class="hero" aria-labelledby="hero-title">
+        <div class="hero__content">
+          <p class="eyebrow">Ruang Tenang</p>
+          <h1 id="hero-title">Teman harian untuk merawat kesehatan mental.</h1>
+          <p class="hero__text">
+            Lakukan check-in emosi, latihan napas, jurnal singkat, dan susun langkah kecil yang realistis saat hari terasa berat.
+          </p>
+          <div class="hero__actions">
+            <a class="button button--primary" href="#check-in">Mulai check-in</a>
+            <a class="button button--ghost" href="#bantuan">Butuh bantuan?</a>
+          </div>
+        </div>
+        <div class="hero__card" aria-label="Ringkasan suasana hati">
+          <span class="hero__emoji" id="hero-emoji">😌</span>
+          <p>Hari ini kamu memilih:</p>
+          <strong id="selected-mood">Tenang</strong>
+          <div class="calm-meter" id="calm-meter">
+            <span id="stress-meter"></span>
+          </div>
+          <small id="stress-summary">Tingkat beban: 4/10</small>
+        </div>
+      </section>
+
+      <section class="grid" id="check-in">
+        <article class="panel panel--wide">
+          <div class="section-heading">
+            <p class="eyebrow">Check-in cepat</p>
+            <h2>Bagaimana perasaanmu sekarang?</h2>
+          </div>
+          <div class="mood-list" id="mood-list" role="list" aria-label="Pilihan suasana hati"></div>
+          <label class="range-label" for="stress-level">
+            Seberapa berat rasanya hari ini? <strong id="stress-value">4/10</strong>
+          </label>
+          <input id="stress-level" max="10" min="1" type="range" value="4" />
+          <div class="care-plan">
+            <h3>Rekomendasi langkah kecil</h3>
+            <p id="care-plan-text"></p>
+          </div>
+        </article>
+
+        <article class="panel breathing-panel">
+          <div class="section-heading">
+            <p class="eyebrow">Latihan napas</p>
+            <h2>4–4–6</h2>
+          </div>
+          <div class="breath-circle" id="breath-circle">
+            <span id="breath-label">Siap</span>
+          </div>
+          <p>Ikuti lingkaran: tarik napas 4 detik, tahan 4 detik, lalu hembuskan 6 detik.</p>
+          <button class="button button--primary" id="breath-toggle" type="button">Mulai latihan</button>
+        </article>
+
+        <article class="panel">
+          <div class="section-heading">
+            <p class="eyebrow">Jurnal refleksi</p>
+            <h2 id="daily-prompt"></h2>
+          </div>
+          <textarea
+            aria-label="Area jurnal refleksi"
+            id="journal"
+            placeholder="Tulis bebas tanpa menghakimi dirimu..."
+          ></textarea>
+          <p class="word-count" id="word-count">0 kata tertulis</p>
+        </article>
+
+        <article class="panel">
+          <div class="section-heading">
+            <p class="eyebrow">Grounding</p>
+            <h2>Teknik 5–4–3–2–1</h2>
+          </div>
+          <ul class="grounding-list">
+            <li>5 hal yang bisa kamu lihat</li>
+            <li>4 hal yang bisa kamu sentuh</li>
+            <li>3 suara yang bisa kamu dengar</li>
+            <li>2 aroma yang kamu sadari</li>
+            <li>1 rasa atau kalimat afirmasi</li>
+          </ul>
+        </article>
+      </section>
+
+      <section class="support" id="bantuan">
+        <div>
+          <p class="eyebrow">Dukungan saat krisis</p>
+          <h2>Kamu tidak harus melewati ini sendirian.</h2>
+          <p>
+            Aplikasi ini bukan pengganti bantuan profesional. Jika kamu merasa berisiko menyakiti diri sendiri atau orang lain,
+            segera hubungi layanan darurat setempat, tenaga kesehatan, atau orang tepercaya di dekatmu.
+          </p>
+        </div>
+        <div class="support__cards" id="support-actions"></div>
+      </section>
+    </main>
+    <script src="src/main.js" defer></script>
+  </body>
+</html>
