@@ -1,0 +1,14 @@
+services:
+  mindcampus:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      MC_DATA_DIR: /data
+      MC_TRUST_PROXY: "1"
+    ports:
+      - "3000:3000"
+    volumes:
+      - mindcampus-data:/data
+volumes:
+  mindcampus-data:

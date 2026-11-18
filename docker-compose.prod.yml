@@ -1,0 +1,32 @@
+# Produksi: aplikasi + Caddy (HTTPS otomatis dari Let's Encrypt).
+# Pakai: isi .env (termasuk DOMAIN), lalu: docker compose -f docker-compose.prod.yml up -d --build
+services:
+  app:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      MC_DATA_DIR: /data
+      MC_TRUST_PROXY: "1"
+      MC_DEMO: "0"
+    volumes:
+      - panjalu-data:/data
+    expose:
+      - "3000"
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - app
+volumes:
+  panjalu-data:
+  caddy-data:
+  caddy-config:

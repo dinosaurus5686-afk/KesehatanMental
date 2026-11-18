@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 360" width="640" height="360">
+<defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#2344b0"/><stop offset="1" stop-color="#5b7cf0"/></linearGradient></defs>
+<rect width="640" height="360" fill="url(#g)"/><circle cx="560" cy="40" r="120" fill="#fff" fill-opacity=".08"/><circle cx="40" cy="340" r="140" fill="#fff" fill-opacity=".07"/>
+<path d="M420 120h120a20 20 0 0 1 20 20v130H440a20 20 0 0 0-20 20z M420 120h-0v170" fill="none" stroke="#fff" stroke-opacity=".55" stroke-width="10" stroke-linejoin="round"/><path d="M420 120H300a20 20 0 0 0-20 20v130h120a20 20 0 0 1 20 20" fill="none" stroke="#fff" stroke-opacity=".55" stroke-width="10" stroke-linejoin="round"/>
+<text x="40" y="318" font-family="Segoe UI, Arial, sans-serif" font-size="26" font-weight="700" fill="#fff">Bertahan Hidup (Survival)</text>
+<text x="40" y="60" font-family="Segoe UI, Arial, sans-serif" font-size="18" font-weight="700" fill="#fff" fill-opacity=".85" letter-spacing="3">PAN-JALU</text>
+</svg>

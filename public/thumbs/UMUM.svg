@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 360" width="640" height="360">
+<defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#10204f"/><stop offset="1" stop-color="#3a57b8"/></linearGradient></defs>
+<rect width="640" height="360" fill="url(#g)"/><circle cx="560" cy="40" r="120" fill="#fff" fill-opacity=".08"/><circle cx="40" cy="340" r="140" fill="#fff" fill-opacity=".07"/>
+<path d="M430 95l100 40v70c0 70-50 110-100 130-50-20-100-60-100-130v-70z" fill="#fff" fill-opacity=".35"/><path d="M390 205l30 30 55-60" fill="none" stroke="#fff" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="40" y="318" font-family="Segoe UI, Arial, sans-serif" font-size="26" font-weight="700" fill="#fff">Layanan &amp; Bantuan</text>
+<text x="40" y="60" font-family="Segoe UI, Arial, sans-serif" font-size="18" font-weight="700" fill="#fff" fill-opacity=".85" letter-spacing="3">PAN-JALU</text>
+</svg>
