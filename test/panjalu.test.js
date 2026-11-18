@@ -27,14 +27,15 @@ const call = (t, p, { method = 'GET', body } = {}) => fetch(base + p, { method, 
 const json = async (t, p, o) => (await call(t, p, o)).json();
 
 test('Konselor PAN-JALU: ajukan → setujui → dipilih mahasiswa lintas kampus → ganti/cabut memindahkan akses', async () => {
-  const adm = await login('admin'); const k2 = await login('K002'); const k1 = await login('K001');
-  const k2id = get("SELECT id FROM users WHERE nim_nip = 'K002'").id;
+  // k2 = pelamar (K001, belum Konselor PAN-JALU di data demo); k1 = konselor lain tanpa kewenangan (K003)
+  const adm = await login('admin'); const k2 = await login('K001'); const k1 = await login('K003');
+  const k2id = get("SELECT id FROM users WHERE nim_nip = 'K001'").id;
   // Mahasiswa dari kampus yang belum punya konselor
   const uni = get("SELECT id FROM universities WHERE id NOT IN (SELECT DISTINCT university_id FROM users WHERE university_id IS NOT NULL) AND status != 'LAYANAN' LIMIT 1").id;
   const sid = insert('users', { role: 'mahasiswa', nim_nip: 'X9990001', nama: 'Mahasiswa Luar', email: 'luar@x.id', password_hash: hashPassword('Rahasia123'), status: 'aktif', aktif: 1, university_id: uni, angkatan: 2024 });
   const s = await login('X9990001', 'Rahasia123');
   assert.equal((await json(s, '/users/me')).perlu_pilih_konselor, true);
-  assert.equal((await json(s, '/panjalu-counselors')).items.length, 0);
+  assert.ok(!(await json(s, '/panjalu-counselors')).items.some((c) => c.id === k2id));
 
   // Pengajuan konselor kampus → admin menyetujui dengan kapasitas
   assert.equal((await call(k2, '/panjalu/apply', { method: 'POST', body: { alasan: 'pendek' } })).status, 400);
@@ -42,9 +43,8 @@ test('Konselor PAN-JALU: ajukan → setujui → dipilih mahasiswa lintas kampus 
   assert.equal((await call(k2, '/panjalu/apply', { method: 'POST', body: { alasan: 'Psikolog klinis, 8 tahun mendampingi mahasiswa.' } })).status, 409);
   assert.equal((await call(k2, '/admin/panjalu')).status, 403);
   const list = await json(adm, '/admin/panjalu?status=menunggu');
-  assert.equal(list.jumlah.menunggu, 1);
   assert.ok(list.ringkasan.tanpa_layanan >= 1);
-  const appId = list.items[0].id;
+  const appId = list.items.find((x) => x.user_id === k2id).id;
   assert.equal((await call(adm, `/admin/panjalu/${appId}/approve`, { method: 'POST', body: { kapasitas: 0 } })).status, 400);
   assert.equal((await call(adm, `/admin/panjalu/${appId}/approve`, { method: 'POST', body: { kapasitas: 20 } })).status, 200);
 
@@ -52,7 +52,7 @@ test('Konselor PAN-JALU: ajukan → setujui → dipilih mahasiswa lintas kampus 
   assert.equal((await call(k2, `/students/${sid}/profile`)).status, 403);
   const pj = await json(s, '/panjalu-counselors');
   assert.equal(pj.kampus_punya_konselor, false);
-  assert.equal(pj.items[0].id, k2id);
+  assert.ok(pj.items.some((c) => c.id === k2id));
   assert.equal((await call(s, '/users/me/panjalu-counselor', { method: 'PUT', body: { counselor_id: k2id } })).status, 400); // tanpa persetujuan akses
   assert.equal((await call(s, '/users/me/panjalu-counselor', { method: 'PUT', body: { counselor_id: k2id, setuju: true } })).status, 200);
   assert.equal((await json(s, '/users/me')).perlu_pilih_konselor, false);
@@ -91,7 +91,7 @@ test('Konselor PAN-JALU: ajukan → setujui → dipilih mahasiswa lintas kampus 
   assert.equal(rv.konseli_dilepas, 1);
   assert.equal((await call(k2, `/students/${sid}/profile`)).status, 403);
   assert.equal((await json(s, '/users/me')).perlu_pilih_konselor, true);
-  assert.equal((await json(s, '/panjalu-counselors')).items.length, 0);
+  assert.ok(!(await json(s, '/panjalu-counselors')).items.some((c) => c.id === k2id));
   // Konselor kampus tetap aktif sebagai konselor kampus
   assert.equal(get("SELECT status FROM users WHERE id = ?", k2id).status, 'aktif');
 });

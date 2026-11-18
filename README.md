@@ -41,11 +41,12 @@ Kata sandi semua akun demo adalah `mindcampus123`.
 | Peran | Login |
 |---|---|
 | Mahasiswa | `2313020001` (Budi Santoso, peer counselor), `2414010071` (Intan, belum pernah asesmen) |
-| Konselor | `K001` (Guruh, M.Pd.), `K002` (Dr. Ratna Wulandari) |
+| Mahasiswa kampus tanpa konselor | `MB001` (Dewi Lestari, baru — diajak memilih konselor saat masuk), `MB002` (Rizky Pratama, sudah memilih Konselor PAN-JALU K002) |
+| Konselor | `K001` (Guruh, M.Pd.), `K002` (Dr. Ratna Wulandari, juga Konselor PAN-JALU), `K003` (Andi Prasetyo, pengajuan Konselor PAN-JALU menunggu) |
 | Koordinator Layanan BK | `KBK01` (Dra. Sri Lestari, M.Pd.) |
 | Admin | `admin` |
 
-Data demo juga berisi satu pendaftar konselor yang menunggu persetujuan (Lestari Handayani).
+Data demo juga berisi satu pendaftar konselor yang menunggu persetujuan (Lestari Handayani) dan satu konselor independen yang menunggu persetujuan admin sebagai Konselor PAN-JALU (`KP001`, Maya Anggraini).
 
 Untuk produksi, jalankan `MC_DEMO=0` dan isi `MC_ADMIN_EMAIL` + `MC_ADMIN_PASSWORD` (min. 10 karakter). Akun admin pertama dibuat otomatis saat server pertama kali berjalan; setelah itu ganti kata sandinya di menu Profil.
 

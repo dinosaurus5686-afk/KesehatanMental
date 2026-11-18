@@ -298,6 +298,28 @@ function seedDemo() {
   // Pendaftar konselor yang sudah verifikasi email dan menunggu persetujuan admin (contoh)
   const pend = insert('users', { role: 'konselor', nim_nip: 'K004', nama: 'Lestari Handayani, M.Psi., Psikolog', email: 'lestari.handayani@panjalu.local', password_hash: pw, university_id: UNP, status: 'menunggu_persetujuan', aktif: 0, telepon: enc('0813-0000-0004') });
   insert('counselors', { user_id: pend, spesialisasi: 'Psikologi Klinis — Trauma & Duka', gelar: 'Psikolog Klinis (SIPP aktif)', lingkup_fakultas: JSON.stringify(['FKIP']) });
+
+  // ---- Konselor PAN-JALU (lintas kampus) & mahasiswa dari kampus yang belum memiliki konselor ----
+  const campus = require('./campus');
+  campus.ensurePanjaluUni();
+  const pjUni = campus.proposeUniversity('Sekolah Tinggi Ilmu Kesehatan Harapan Bangsa', 'Kabupaten Kediri');
+  const pjProdi = insert('prodi', { university_id: pjUni, nama_prodi: 'Keperawatan', fakultas: 'Fakultas Ilmu Kesehatan', fakultas_kode: 'FIK', jenjang: 'S1', status: 'usulan' });
+  // K002 sudah disetujui sebagai Konselor PAN-JALU; K003 masih menunggu persetujuan admin
+  insert('panjalu_counselors', { user_id: C.K002, alasan: 'Psikolog klinis; 8 tahun mendampingi mahasiswa, termasuk penanganan krisis.', status: 'aktif', kapasitas: 50, ditinjau_oleh: admin, ditinjau_pada: daysAgo(3), diajukan_pada: daysAgo(4) });
+  insert('panjalu_counselors', { user_id: C.K003, alasan: 'Berpengalaman konseling daring lintas kampus dan konseling kelompok.', status: 'menunggu', kapasitas: 50, diajukan_pada: daysAgo(1) });
+  // Konselor independen (tanpa kampus) menunggu persetujuan admin
+  const indep = insert('users', { role: 'konselor', nim_nip: 'KP001', nama: 'Maya Anggraini, M.Psi., Psikolog', email: 'kp001@panjalu.local', password_hash: pw, university_id: campus.PANJALU_UNI, status: 'menunggu_persetujuan', aktif: 0 });
+  insert('counselors', { user_id: indep, spesialisasi: 'Psikologi Klinis — Depresi & Regulasi Emosi', gelar: 'Psikolog Klinis (SIPP aktif), praktik mandiri', lingkup_fakultas: '[]' });
+  insert('panjalu_counselors', { user_id: indep, alasan: 'Psikolog klinis praktik mandiri 6 tahun; bersedia mendampingi mahasiswa dari kampus yang belum memiliki konselor.', independen: 1, status: 'menunggu', kapasitas: 50, diajukan_pada: daysAgo(0, 8) });
+  // MB001: mahasiswa baru, belum memilih konselor → diajak memilih saat masuk
+  insert('users', { role: 'mahasiswa', nim_nip: 'MB001', nama: 'Dewi Lestari', email: 'mb001@panjalu.local', password_hash: pw, university_id: pjUni, prodi_id: pjProdi, angkatan: new Date().getFullYear(), kelas: 'A', gender: 'P' });
+  // MB002: sudah memilih K002 sebagai Konselor PAN-JALU dan sudah dua kali asesmen
+  const mb2 = insert('users', { role: 'mahasiswa', nim_nip: 'MB002', nama: 'Rizky Pratama', email: 'mb002@panjalu.local', password_hash: pw, university_id: pjUni, prodi_id: pjProdi, angkatan: new Date().getFullYear() - 1, kelas: 'B', gender: 'L', pilih_konselor_pada: daysAgo(6) });
+  insert('student_counselors', { student_id: mb2, counselor_id: C.K002, jenis: 'panjalu' });
+  insert('consents', { user_id: mb2, jenis_consent: 'akses_konselor_panjalu', disetujui_pada: daysAgo(6), versi_kebijakan: 'v1' });
+  { const rand = mulberry32(777); storeAssessment(mb2, makeAnswers(rand, 0.35, 0.7, {}), daysAgo(5)); storeAssessment(mb2, makeAnswers(rand, 0.45, 0.6, {}), daysAgo(1)); }
+  insert('messages', { sender_id: mb2, receiver_id: C.K002, isi_teks: enc('Bu, terima kasih sudah mau mendampingi. Kampus saya belum ada konselornya.'), dikirim_pada: daysAgo(0, 9) });
+
   run('UPDATE users SET email_verified_at = created_at');
 }
 
