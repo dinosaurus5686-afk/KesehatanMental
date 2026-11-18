@@ -1,5 +1,5 @@
 // Service worker PWA: cache cangkang aplikasi saja. Data API tidak pernah di-cache (data sensitif).
-const CACHE = 'panjalu-shell-v25-rangkap';
+const CACHE = 'panjalu-shell-v26-konselor-panjalu';
 const SHELL = ['/', '/styles.css', '/js/app.js', '/js/core.js', '/js/student.js', '/js/staff.js', '/js/icons.js', '/js/public.js', '/logo.png', '/favicon.png', '/manifest.webmanifest'];
 self.addEventListener('install', (e) => { e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting())); });
 self.addEventListener('activate', (e) => { e.waitUntil(caches.keys().then((ks) => Promise.all(ks.filter((k) => k !== CACHE).map((k) => caches.delete(k)))).then(() => self.clients.claim())); });

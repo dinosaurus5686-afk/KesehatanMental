@@ -5,7 +5,7 @@ const crypto = require('node:crypto');
 const { all, get, run, insert, update, tx, nowIso, audit } = require('../db');
 const { enc, dec, sha256 } = require('../security');
 const { fail, requireRole, str } = require('../http');
-const { notify, emit, isOnline, latestAssessment, canAccessStudent, displayName, dimLabel } = require('../services');
+const { notify, emit, isOnline, latestAssessment, canAccessStudent, displayName, dimLabel, panjaluOf, isPanjalu } = require('../services');
 const { COUNSELING_TOPICS, DIMENSIONS } = require('../reference');
 const pdf = require('../pdf');
 const campus = require('../campus');
@@ -141,12 +141,17 @@ function counselorView(c) {
 }
 // Konselor yang dapat dipilih mahasiswa untuk konseling: sekampus, dan konselor membuka layanan untuk seluruh mahasiswa
 // kampus ATAU mahasiswa ini termasuk binaannya (memilih konselor tersebut).
-const counselorPool = (user) => all(`SELECT c.*, u.nama FROM counselors c JOIN users u ON u.id = c.user_id WHERE u.status = 'aktif' AND u.university_id IS ?
-  ${user.role === 'mahasiswa' ? 'AND (c.layanan_terbuka = 1 OR EXISTS (SELECT 1 FROM student_counselors sc WHERE sc.counselor_id = c.user_id AND sc.student_id = ?))' : ''} ORDER BY u.nama`, ...(user.role === 'mahasiswa' ? [user.university_id, user.id] : [user.university_id]));
+// Ditambah Konselor PAN-JALU pilihan mahasiswa (lintas kampus).
+const counselorPool = (user) => (user.role === 'mahasiswa'
+  ? all(`SELECT c.*, u.nama FROM counselors c JOIN users u ON u.id = c.user_id WHERE u.status = 'aktif' AND ((u.university_id IS ?
+    AND (c.layanan_terbuka = 1 OR EXISTS (SELECT 1 FROM student_counselors sc WHERE sc.counselor_id = c.user_id AND sc.student_id = ?)))
+    OR (c.user_id = ? AND c.user_id IN (SELECT user_id FROM panjalu_counselors WHERE status = 'aktif'))) ORDER BY u.nama`, user.university_id, user.id, panjaluOf(user.id))
+  : all("SELECT c.*, u.nama FROM counselors c JOIN users u ON u.id = c.user_id WHERE u.status = 'aktif' AND u.university_id IS ? ORDER BY u.nama", user.university_id));
 const counselorAllowed = (user, cid) => counselorPool(user).some((c) => c.user_id === cid);
 r.get('/counselors', (req, res) => {
   const mine = req.user.role === 'mahasiswa' ? new Set(all('SELECT counselor_id FROM student_counselors WHERE student_id = ?', req.user.id).map((x) => x.counselor_id)) : new Set();
-  res.json(counselorPool(req.user).map((c) => ({ ...counselorView(c), binaan_saya: mine.has(c.user_id), layanan_terbuka: !!c.layanan_terbuka })).sort((a, b) => b.binaan_saya - a.binaan_saya));
+  const pj = req.user.role === 'mahasiswa' ? panjaluOf(req.user.id) : null;
+  res.json(counselorPool(req.user).map((c) => ({ ...counselorView(c), binaan_saya: mine.has(c.user_id), konselor_panjalu: c.user_id === pj, layanan_terbuka: !!c.layanan_terbuka })).sort((a, b) => b.binaan_saya - a.binaan_saya));
 });
 r.get('/counselors/:id/availability', (req, res) => {
   if (!counselorAllowed(req.user, req.params.id)) fail(404, 'Konselor tidak tersedia untuk Anda.');
@@ -383,7 +388,7 @@ r.get('/counseling/history', konselor, (req, res) => {
 function canMessage(user, otherId) {
   const o = get("SELECT id, role, university_id FROM users WHERE id = ? AND status = 'aktif'", otherId);
   if (!o) return false;
-  if (user.role === 'mahasiswa') return o.role === 'konselor' && o.university_id === user.university_id;
+  if (user.role === 'mahasiswa') return o.role === 'konselor' && (o.university_id === user.university_id || (o.id === panjaluOf(user.id) && isPanjalu(o.id)));
   if (user.role === 'konselor') return (o.role === 'konselor' && o.university_id === user.university_id) || (o.role === 'mahasiswa' && canAccessStudent(user, o.id).ok);
   return false;
 }

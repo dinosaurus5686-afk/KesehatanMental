@@ -5,7 +5,7 @@ const PDFDocument = require('pdfkit');
 const { all, get, run, insert, update, nowIso, audit, getConfig } = require('../db');
 const { enc, dec } = require('../security');
 const { fail, requireRole, str, rateLimit } = require('../http');
-const { latestAssessment, assessmentDetail, canAccessStudent, scopedStudentIds, displayName, notify, counselorScope, effectiveSchedule, recommendationsFor, dimLabel, coordinators, caseCode, visibleContent } = require('../services');
+const { latestAssessment, assessmentDetail, canAccessStudent, scopedStudentIds, displayName, notify, counselorScope, effectiveSchedule, recommendationsFor, dimLabel, coordinators, caseCode, visibleContent, isPanjalu } = require('../services');
 const { DIMENSIONS, SUPPORT, SERVICE_RECS, COUNSELING_TOPICS, QUADRANTS, NORMS } = require('../reference');
 const ai = require('../ai');
 const pdfx = require('../pdf');
@@ -28,14 +28,17 @@ const fmtStudent = (s, viewer) => {
   const p = get('SELECT nama_prodi, fakultas_kode FROM prodi WHERE id = ?', s.prodi_id);
   const a = latestAssessment(s.id, { withRecs: false });
   return { id: s.id, nama: displayName(s, viewer), nim: s.nim_nip, prodi: p?.nama_prodi, fakultas: p?.fakultas_kode, angkatan: s.angkatan, kelas: s.kelas, disamarkan: !!s.identitas_disamarkan,
+    kampus_lain: viewer && s.university_id !== viewer.university_id ? (get('SELECT nama FROM universities WHERE id = ?', s.university_id)?.nama || '-') : null,
     skor_total: a?.skor_total ?? null, kategori_total: a?.kategori_total ?? null, pelemahan: a?.pelemahan?.length ?? null, kuadran: a?.kuadran ?? null, risk_alert: a?.risk_alert ?? null, terakhir_asesmen: a?.diisi_pada ?? null };
 };
 
 // ---- Dashboard ----
 r.get('/dashboard/counselor', konselor, (req, res) => {
-  const ids = new Set(scopedStudentIds(req.user));
+  const ids = new Set(scopedStudentIds(req.user)); const pj = isPanjalu(req.user.id);
   const since = new Date(Date.now() - 7 * 86400000).toISOString();
-  const alerts = all("SELECT r.*, u.nama, u.nim_nip, u.identitas_disamarkan, u.id AS uid, t.nama AS ditugaskan_nama FROM risk_alerts r JOIN users u ON u.id = r.student_id LEFT JOIN users t ON t.id = r.ditugaskan_ke WHERE r.level = 'red' AND r.ditindaklanjuti_pada IS NULL AND u.university_id IS ? ORDER BY r.created_at", req.user.university_id)
+  const alerts = all("SELECT r.*, u.nama, u.nim_nip, u.identitas_disamarkan, u.id AS uid, t.nama AS ditugaskan_nama FROM risk_alerts r JOIN users u ON u.id = r.student_id LEFT JOIN users t ON t.id = r.ditugaskan_ke WHERE r.level = 'red' AND r.ditindaklanjuti_pada IS NULL ORDER BY r.created_at")
+    // kasus kampus sendiri, ditambah (Konselor PAN-JALU) konseli lintas kampus & kasus kampus tanpa konselor yang menjadi kewenangannya
+    .filter((a) => (a.university_id ?? get('SELECT university_id FROM users WHERE id = ?', a.uid).university_id) === req.user.university_id || (pj && canAccessStudent(req.user, a.uid).ok))
     .map((a) => ({ id: a.id, student_id: a.student_id, nama: displayName({ ...a, id: a.uid }, req.user), dibuat: a.created_at, dieskalasi: a.dieskalasi_pada, sumber: a.sumber, ditugaskan: a.ditugaskan_ke ? { nama: a.ditugaskan_nama, saya: a.ditugaskan_ke === req.user.id } : null }));
   const yellow = all("SELECT r.id, r.student_id, r.created_at FROM risk_alerts r WHERE r.level = 'yellow' AND r.ditindaklanjuti_pada IS NULL").filter((x) => ids.has(x.student_id));
   const acts = [];
@@ -64,15 +67,15 @@ r.get('/dashboard/counselor', konselor, (req, res) => {
 });
 
 r.post('/alerts/:id/ack', konselor, (req, res) => {
-  const a = get('SELECT r.* FROM risk_alerts r JOIN users u ON u.id = r.student_id WHERE r.id = ? AND u.university_id IS ?', req.params.id, req.user.university_id);
-  if (!a) fail(404, 'Peringatan tidak ditemukan.');
+  const a = get('SELECT r.*, u.university_id AS uni FROM risk_alerts r JOIN users u ON u.id = r.student_id WHERE r.id = ?', req.params.id);
+  if (!a || (a.uni !== req.user.university_id && !canAccessStudent(req.user, a.student_id).ok)) fail(404, 'Peringatan tidak ditemukan.');
   if (a.ditindaklanjuti_pada) fail(409, 'Kasus ini sudah ditindaklanjuti konselor lain.');
   const catatan = str(req.body?.catatan, 1000);
   if (catatan.length < 5) fail(400, 'Tuliskan tindakan yang sudah dilakukan (mis. "Menelepon mahasiswa, kondisi aman, janji temu besok").');
   update('risk_alerts', a.id, { ditindaklanjuti_oleh: req.user.id, ditindaklanjuti_pada: nowIso(), catatan_tindak_lanjut: enc(catatan) });
   audit({ actor: req.user, aksi: 'tindak_lanjut_krisis', entitas: 'risk_alerts', entitas_id: a.id, student_id: a.student_id, ip: req.ip });
-  for (const c of all("SELECT id FROM users WHERE role = 'konselor' AND id != ? AND university_id IS ?", req.user.id, req.user.university_id)) notify(c.id, { tipe: 'krisis', judul: 'Kasus risiko-merah sudah ditindaklanjuti', isi: `Ditangani oleh ${req.user.nama}.`, tautan: '#/c/dashboard' });
-  for (const uid of coordinators(req.user.university_id)) notify(uid, { tipe: 'krisis', judul: `Kasus ${caseCode(a.id)} sudah ditindaklanjuti`, isi: `Ditangani oleh ${req.user.nama}.`, tautan: '#/k/darurat' });
+  for (const c of all("SELECT id FROM users WHERE role = 'konselor' AND id != ? AND university_id IS ?", req.user.id, a.uni)) notify(c.id, { tipe: 'krisis', judul: 'Kasus risiko-merah sudah ditindaklanjuti', isi: `Ditangani oleh ${req.user.nama}.`, tautan: '#/c/dashboard' });
+  for (const uid of coordinators(a.uni)) notify(uid, { tipe: 'krisis', judul: `Kasus ${caseCode(a.id)} sudah ditindaklanjuti`, isi: `Ditangani oleh ${req.user.nama}.`, tautan: '#/k/darurat' });
   res.json({ ok: true });
 });
 

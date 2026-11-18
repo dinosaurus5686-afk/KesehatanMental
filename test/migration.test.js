@@ -43,7 +43,7 @@ const boot = (dir) => execFileSync(process.execPath, ['--disable-warning=Experim
   cwd: ROOT, env: { ...process.env, MC_DATA_DIR: dir, MC_DB_FILE: path.join(dir, 'panjalu.db'), MC_AUDIT_FILE: path.join(dir, 'audit.db'), MC_DATA_KEY: 'a'.repeat(64), MC_JWT_SECRET: 'b'.repeat(64) }, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'],
 });
 
-test('migrasi v4 → v6: seluruh akun lama utuh, peran koordinator tersedia, data pindah ke kampus UNP, relasi tetap valid', () => {
+test('migrasi v4 → v7: seluruh akun lama utuh, peran koordinator tersedia, data pindah ke kampus UNP, relasi tetap valid', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'panjalu-mig-'));
   try {
     const before = makeV4(dir);
@@ -54,10 +54,11 @@ test('migrasi v4 → v6: seluruh akun lama utuh, peran koordinator tersedia, dat
     assert.match(out, /Migrasi v6: 26 akun dipindahkan ke kampus Universitas Nusantara PGRI Kediri/);
     // Baris akun identik byte-per-byte (termasuk hash kata sandi & data terenkripsi), selain kolom kampus yang baru
     const rows = db.prepare('SELECT * FROM users ORDER BY id').all();
-    assert.equal(JSON.stringify(rows.map(({ university_id, ...r }) => r)), before);
+    assert.equal(JSON.stringify(rows.map(({ university_id, pilih_konselor_pada, ...r }) => r)), before);
+    assert.ok(rows.every((r) => r.pilih_konselor_pada === null));
     assert.ok(rows.filter((r) => r.role !== 'admin').every((r) => r.university_id === '071072'));
     assert.equal(rows.find((r) => r.role === 'admin').university_id, null);
-    assert.equal(db.prepare("SELECT value FROM institution_config WHERE key = 'schema_version'").get().value, '6');
+    assert.equal(db.prepare("SELECT value FROM institution_config WHERE key = 'schema_version'").get().value, '7');
     assert.equal(db.prepare('PRAGMA integrity_check').get().integrity_check, 'ok');
     assert.equal(db.prepare('PRAGMA foreign_key_check').all().length, 0);
     assert.equal(db.prepare("SELECT user_id FROM sessions WHERE id = 's1'").get().user_id, 'u-m3');

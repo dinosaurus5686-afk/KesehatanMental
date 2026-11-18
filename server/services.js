@@ -125,6 +125,14 @@ const COORD_WHERE = "status = 'aktif' AND university_id IS ? AND (role = 'koordi
 const coordinatorUsers = (uni) => all(`SELECT id, email, nama, role FROM users WHERE ${COORD_WHERE}`, uni);
 const coordinators = (uni) => coordinatorUsers(uni).map((r) => r.id);
 const dualCoordinator = (userId) => !!get("SELECT 1 AS x FROM coordinator_claims WHERE user_id = ? AND status = 'disetujui'", userId);
+// Konselor PAN-JALU: konselor yang disetujui admin melayani mahasiswa lintas kampus (dipilih langsung oleh mahasiswa)
+const PJ_ACTIVE = "SELECT u.id FROM panjalu_counselors p JOIN users u ON u.id = p.user_id WHERE p.status = 'aktif' AND u.status = 'aktif' AND u.role = 'konselor'";
+const panjaluCounselors = () => all(PJ_ACTIVE).map((r) => r.id);
+const panjaluOnDuty = () => all(`${PJ_ACTIVE} AND u.id IN (SELECT user_id FROM counselors WHERE status_jaga = 1)`).map((r) => r.id);
+const isPanjalu = (userId) => !!get(`${PJ_ACTIVE} AND u.id = ?`, userId);
+const panjaluOf = (studentId) => get("SELECT counselor_id FROM student_counselors WHERE student_id = ? AND jenis = 'panjalu'", studentId)?.counselor_id || null;
+const panjaluClientIds = (counselorId) => all("SELECT sc.student_id FROM student_counselors sc JOIN users u ON u.id = sc.student_id WHERE sc.counselor_id = ? AND sc.jenis = 'panjalu' AND u.status = 'aktif'", counselorId).map((r) => r.student_id);
+const campusHasCounselor = (uni) => !!uni && allCounselors(uni).length > 0;
 const universityOf = (userId) => get('SELECT university_id FROM users WHERE id = ?', userId)?.university_id ?? null;
 // Kode kasus anonim untuk Koordinator (tanpa nama/NIM): turunan tetap dari id peringatan
 const caseCode = (alertId) => `KD-${alertId.replace(/-/g, '').slice(0, 6).toUpperCase()}`;
@@ -140,7 +148,15 @@ function handleRisk(student, assessmentId, level, { sumber = 'asesmen', izinDihu
   const onDuty = counselorsOnDuty(uni);
   let targets = onDuty;
   if (!targets.length) targets = allCounselors(uni);
-  if (!targets.length) targets = admins(); // kampus belum punya konselor aktif
+  const pj = panjaluOf(student.id);
+  if (!targets.length) {
+    // Kampus belum punya konselor aktif: Konselor PAN-JALU pilihan mahasiswa; bila belum memilih, Konselor PAN-JALU yang berjaga; admin selalu diberi tahu
+    targets = pj ? [] : panjaluOnDuty();
+    if (!pj && !targets.length) targets = panjaluCounselors();
+    targets = [...targets, ...admins()];
+  }
+  if (pj) targets = [...targets, pj];
+  targets = [...new Set(targets)];
   for (const uid of targets) {
     notify(uid, { tipe: 'krisis', prioritas: 'krisis', judul: 'BUTUH BANTUAN SEGERA — perlu tindak lanjut', isi: `${nama}: hasil IKDKM-M menunjukkan kebutuhan didampingi konselor segera.${izinDihubungi ? '' : ' Mahasiswa memilih tidak dihubungi otomatis.'}`, tautan: `#/c/mahasiswa/${student.id}` });
     emit(uid, 'crisis', { alert_id: alertId, student_id: student.id });
@@ -165,7 +181,14 @@ function canAccessStudent(user, studentId) {
   if (!s) return { ok: false, reason: 'not_found' };
   if (user.role === 'mahasiswa') return { ok: user.id === studentId, reason: 'self' };
   if (user.role !== 'konselor') return { ok: false, reason: 'role' };
-  if (s.university_id !== user.university_id) return { ok: false, reason: 'di_luar_kampus' };
+  // Konselor PAN-JALU yang dipilih mahasiswa (lintas kampus); kewenangan berpindah saat mahasiswa mengganti konselornya
+  if (get("SELECT 1 AS x FROM student_counselors WHERE student_id = ? AND counselor_id = ? AND jenis = 'panjalu'", studentId, user.id) && isPanjalu(user.id)) return { ok: true, reason: 'konselor_panjalu' };
+  if (s.university_id !== user.university_id) {
+    // Kasus darurat mahasiswa yang kampusnya belum punya konselor & belum memilih Konselor PAN-JALU: Konselor PAN-JALU berjaga dapat menanganinya
+    if (!campusHasCounselor(s.university_id) && !panjaluOf(studentId) && isPanjalu(user.id) && get('SELECT status_jaga FROM counselors WHERE user_id = ?', user.id)?.status_jaga
+      && get("SELECT 1 AS x FROM risk_alerts WHERE student_id = ? AND level = 'red' AND ditindaklanjuti_pada IS NULL", studentId)) return { ok: true, reason: 'krisis_panjalu' };
+    return { ok: false, reason: 'di_luar_kampus' };
+  }
   if (get('SELECT 1 AS x FROM student_counselors WHERE student_id = ? AND counselor_id = ?', studentId, user.id)) return { ok: true, reason: 'binaan' };
   if (get('SELECT 1 AS x FROM appointments WHERE student_id = ? AND counselor_id = ?', studentId, user.id)) return { ok: true, reason: 'klien' };
   if (!get('SELECT 1 AS x FROM student_counselors WHERE student_id = ?', studentId)) {
@@ -181,7 +204,8 @@ function canAccessStudent(user, studentId) {
 
 function scopedStudentIds(user) {
   if (user.role !== 'konselor') return [];
-  return all("SELECT id FROM users WHERE role = 'mahasiswa' AND status = 'aktif' AND university_id IS ?", user.university_id).map((r) => r.id).filter((id) => canAccessStudent(user, id).ok);
+  const campusIds = all("SELECT id FROM users WHERE role = 'mahasiswa' AND status = 'aktif' AND university_id IS ?", user.university_id).map((r) => r.id).filter((id) => canAccessStudent(user, id).ok);
+  return [...new Set([...campusIds, ...(isPanjalu(user.id) ? panjaluClientIds(user.id) : [])])];
 }
 
 function displayName(student, viewer) {
@@ -222,5 +246,5 @@ const dimLabel = (kode) => DIMENSIONS.find((d) => d.kode === kode)?.label || kod
 module.exports = {
   setIo, emit, notify, markOnline, isOnline, storeAssessment, contentRecommendations, serviceRecommendations, recommendationsFor, decodeAnswers,
   handleRisk, counselorScope, canAccessStudent, scopedStudentIds, assessmentDetail, latestAssessment, effectiveSchedule, displayName,
-  runScheduler, counselorsOnDuty, allCounselors, activePeer, dimLabel, QUADRANTS, coordinators, coordinatorUsers, dualCoordinator, admins, caseCode, facultyOf, universityOf, visibleContent,
+  runScheduler, counselorsOnDuty, allCounselors, activePeer, dimLabel, QUADRANTS, coordinators, coordinatorUsers, dualCoordinator, admins, panjaluCounselors, panjaluOnDuty, isPanjalu, panjaluOf, panjaluClientIds, campusHasCounselor, caseCode, facultyOf, universityOf, visibleContent,
 };

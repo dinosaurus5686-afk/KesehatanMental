@@ -9,7 +9,7 @@ const K = ['konselor']; const ALL = ['konselor', 'admin', 'koordinator']; const 
 export function staffNav(role) {
   const items = {
     konselor: [['#/c/dashboard', 'Dashboard', I.grid], ['#/c/asesmen', 'Asesmen IKDKM-M', I.clip], ['#/c/konten', 'Psikoedukasi', I.folder], ['#/c/mahasiswa', 'Profil Mahasiswa', I.user], ['#/c/konseling', 'Konseling', I.desk, ['#/c/meja', '#/c/pesan', '#/c/pengaturan']], ['#/c/laporan', 'Laporan Komunal', I.chart], ['#/c/komunitas', 'Komunitas', I.people], ['#/c/kinerja', 'Evaluasi & Kinerja', I.star]],
-    admin: [['#/a/asesmen', 'Asesmen', I.clip], ['#/a/psikometrik', 'Psikometrik', I.chart], ['#/a/konten', 'Konten Psikoedukasi', I.folder], ['#/a/koordinator', 'Pendaftar Koordinator', I.people], ['#/a/home', 'Web Home & Profil', I.home]],
+    admin: [['#/a/asesmen', 'Asesmen', I.clip], ['#/a/psikometrik', 'Psikometrik', I.chart], ['#/a/konten', 'Konten Psikoedukasi', I.folder], ['#/a/koordinator', 'Pendaftar Koordinator', I.people], ['#/a/panjalu', 'Konselor PAN-JALU', I.shield], ['#/a/home', 'Web Home & Profil', I.home]],
     koordinator: [['#/k/dashboard', 'Dashboard', I.grid], ['#/k/konselor', 'Verifikasi Konselor', I.shield], ['#/k/jadwal', 'Jadwal Konselor', I.calendar], ['#/k/prodi', 'Fakultas & Prodi', I.book], ['#/k/darurat', 'Kasus Darurat', I.alert], ['#/k/laporan', 'Laporan Komunal', I.chart]],
   }[role];
   return items.map(([href, label, ico, alt]) => ({ href, label, ico, alt }));
@@ -47,13 +47,33 @@ actions.claimCancel = async (el) => {
   toast('Pengajuan dibatalkan.'); rerender();
 };
 
+// Kartu Konselor PAN-JALU (melayani mahasiswa lintas kampus; wajib disetujui admin)
+function pjCard(pj) {
+  if (!pj) return '';
+  const p = pj.pengajuan;
+  if (p?.status === 'aktif') return `<section class="card claim-card ok"><div class="claim-ico" aria-hidden="true">🌐</div><div><h3>Anda Konselor PAN-JALU</h3><p class="small">Mahasiswa dari kampus mana pun dapat memilih Anda. Saat ini <b>${pj.konseli}</b> dari kapasitas <b>${p.kapasitas}</b> konseli PAN-JALU; mereka tampil di menu <a href="#/c/mahasiswa">Profil Mahasiswa</a> dengan label kampus asal. Kasus darurat konseli Anda — dan kasus darurat dari kampus tanpa konselor saat Anda berstatus jaga — dikirim ke Anda.</p>
+    ${p.independen ? '' : '<button class="btn ghost sm" data-act="pjLeave" data-k="lepas">Lepas status Konselor PAN-JALU</button>'}</div></section>`;
+  if (p?.status === 'menunggu') return `<section class="card claim-card warn"><div class="claim-ico" aria-hidden="true">⏳</div><div><h3>Pengajuan Konselor PAN-JALU menunggu persetujuan admin</h3><p class="small">Diajukan ${fmtDT(p.diajukan_pada)}.</p><button class="btn ghost sm" data-act="pjLeave" data-k="batal">Batalkan pengajuan</button></div></section>`;
+  if (!pj.bisa_mengajukan) return '';
+  const prev = p && ['ditolak', 'dicabut'].includes(p.status) ? `<div class="notice warn small">Status/pengajuan sebelumnya ${p.status} admin${p.catatan ? `: “${esc(p.catatan)}”` : '.'}</div>` : '';
+  return `<details class="card claim-card"><summary class="claim-sum"><span class="claim-ico" aria-hidden="true">🌐</span><span><b>Jadi Konselor PAN-JALU</b><small class="muted"> — dampingi mahasiswa dari kampus yang belum memiliki konselor</small></span></summary><div>
+    <p class="small">Konselor PAN-JALU dapat dipilih langsung oleh mahasiswa dari kampus mana pun. Mahasiswa yang memilih Anda memberikan persetujuan akses data asesmen & perkembangannya, dan dapat mengganti konselornya kapan saja. Peran konselor kampus Anda tetap berjalan. Pengajuan <b>wajib disetujui admin</b>.</p>${prev}
+    <form data-form="pjApply" class="stack"><label>Alasan & pengalaman pendampingan<textarea name="alasan" rows="2" required minlength="10" maxlength="1000"></textarea></label><div class="row end"><button class="btn primary" type="submit">Ajukan ke admin</button></div></form></div></details>`;
+}
+forms.pjApply = async (d) => { await api('/panjalu/apply', { method: 'POST', body: d }); toast('Pengajuan Konselor PAN-JALU dikirim ke admin.'); rerender(); };
+actions.pjLeave = async (el) => {
+  const lepas = el.dataset.k === 'lepas';
+  if (!(await confirmBox(lepas ? 'Lepas status Konselor PAN-JALU? Seluruh konseli PAN-JALU Anda akan diminta memilih konselor baru dan akses Anda ke data mereka berakhir.' : 'Batalkan pengajuan Konselor PAN-JALU?', { ok: lepas ? 'Lepas status' : 'Batalkan' }))) return;
+  const r = await api('/panjalu/me', { method: 'DELETE' }); toast(lepas ? `Status dilepas; ${r.konseli_dilepas} konseli diberi tahu.` : 'Pengajuan dibatalkan.'); rerender();
+};
+
 async function dashboard() {
-  const [d, me, cl] = await Promise.all([api('/dashboard/counselor'), api('/counselor-profile/me'), api('/coord-claim/me').catch(() => null)]);
+  const [d, me, cl, pj] = await Promise.all([api('/dashboard/counselor'), api('/counselor-profile/me'), api('/coord-claim/me').catch(() => null), api('/panjalu/me').catch(() => null)]);
   const k = d.kpi;
   const kpi = (label, val, tone, href) => `<a class="kpi ${tone}" href="${href}"><span>${label}</span><b>${val}</b></a>`;
   return `<div class="row between wrap"><div><span class="eyebrow">Lingkup kewenangan: ${d.lingkup.join(', ') || 'klien sendiri'}</span><h1>Halo, ${esc(state.user.nama)}</h1></div>
     <label class="switch"><input type="checkbox" data-change="dutyToggle" ${me.status_jaga ? 'checked' : ''}><span></span>Status jaga ${me.status_jaga ? 'aktif' : 'nonaktif'}</label></div>
-  ${claimCard(cl)}
+  ${claimCard(cl)}${pjCard(pj)}
   <div class="kpis">${kpi('Butuh bantuan segera', k.risiko_tinggi_aktif, k.risiko_tinggi_aktif ? 'crit' : 'ok', '#/c/dashboard')}${kpi('Reservasi baru', k.reservasi_baru, k.reservasi_baru ? 'warn' : '', '#/c/meja')}${kpi('Entri jurnal (7 hari)', k.entri_jurnal_7hari, '', '#/c/mahasiswa')}${kpi('Workbook aktif (30 hari)', k.workbook_aktif, '', '#/c/mahasiswa')}</div>
   ${d.alerts.length ? `<section class="card alert-panel"><h3>Konseli yang menyatakan butuh bantuan segera</h3><p class="small">SLA institusi: ${d.sla_menit} menit. Hubungi mahasiswa, pastikan keamanannya, lalu tandai ditindaklanjuti dengan catatan tindakan.</p>
     ${d.alerts.map((a) => { const mins = Math.round((Date.now() - new Date(a.dibuat)) / 60000); const over = mins > d.sla_menit; return `<div class="alert-row ${over ? 'over' : ''}"><div><b>${studentLink(a.student_id, a.nama)}</b>${a.ditugaskan ? ` <span class="chip ${a.ditugaskan.saya ? 'crit' : ''}">Ditugaskan koordinator ke ${a.ditugaskan.saya ? 'Anda' : esc(a.ditugaskan.nama)}</span>` : ''}<span class="small">Terdeteksi ${ago(a.dibuat)} dari ${esc(a.sumber)} ${over ? `· <b>melewati SLA${a.dieskalasi ? ', sudah dieskalasi ke penanggung jawab layanan' : ''}</b>` : `· sisa ${d.sla_menit - mins} menit`}</span></div>
@@ -84,7 +104,7 @@ async function students() {
   return `<div class="row between wrap"><div><span class="eyebrow">Lingkup: ${d.lingkup.join(', ')} + klien Anda + kasus krisis terbuka saat jaga</span><h1>Profil Mahasiswa</h1></div>
     <form data-form="studentFilter" class="row wrap"><input id="st_q" name="q" type="search" placeholder="Cari nama, NIM, prodi" value="${esc(studentQ)}"><select id="st_d" name="d"><option value="">Semua</option><option value="segera" ${dF === 'segera' ? 'selected' : ''}>Butuh bantuan segera</option>${['Krisis', 'Rentan', 'Tangguh'].map((k) => `<option value="${k}" ${dF === k ? 'selected' : ''}>Indeks: ${k}</option>`).join('')}<option value="none" ${dF === 'none' ? 'selected' : ''}>Belum asesmen</option></select><button class="btn ghost" type="submit">Terapkan</button></form></div>
   <section class="card"><div class="table-wrap"><table class="table"><thead><tr><th>Mahasiswa</th><th>Prodi</th><th>Angkatan</th><th>Hasil IKDKM-M terakhir</th><th>Dimensi melemah</th><th>Asesmen terakhir</th></tr></thead><tbody>
-  ${list.map((s) => `<tr><td>${studentLink(s.id, s.nama)}${s.disamarkan ? ' <span class="chip">disamarkan</span>' : ''}<br><small class="mono muted">${esc(s.nim || '')}</small></td><td>${esc(s.prodi || '')}</td><td>${s.angkatan || ''}${s.kelas ? '-' + esc(s.kelas) : ''}</td><td>${kdChips(s)} ${segeraChip(s.risk_alert === 'red')}</td><td class="num">${s.pelemahan ?? '—'}</td><td class="small muted">${s.terakhir_asesmen ? ago(s.terakhir_asesmen) : '—'}</td></tr>`).join('') || '<tr><td colspan="6" class="muted">Tidak ada mahasiswa yang cocok.</td></tr>'}
+  ${list.map((s) => `<tr><td>${studentLink(s.id, s.nama)}${s.disamarkan ? ' <span class="chip">disamarkan</span>' : ''}${s.kampus_lain ? ' <span class="chip info" title="Konseli PAN-JALU dari kampus lain">PAN-JALU</span>' : ''}<br><small class="mono muted">${esc(s.nim || '')}</small></td><td>${esc(s.prodi || '')}${s.kampus_lain ? `<br><small class="muted">${esc(s.kampus_lain)}</small>` : ''}</td><td>${s.angkatan || ''}${s.kelas ? '-' + esc(s.kelas) : ''}</td><td>${kdChips(s)} ${segeraChip(s.risk_alert === 'red')}</td><td class="num">${s.pelemahan ?? '—'}</td><td class="small muted">${s.terakhir_asesmen ? ago(s.terakhir_asesmen) : '—'}</td></tr>`).join('') || '<tr><td colspan="6" class="muted">Tidak ada mahasiswa yang cocok.</td></tr>'}
   </tbody></table></div></section>`;
 }
 forms.studentFilter = (d) => { studentQ = d.q || ''; dF = d.d || ''; rerender(); };
@@ -784,6 +804,45 @@ actions.homeReset = async () => { if (!(await confirmBox('Kembalikan seluruh isi
 
 // ================= Admin: pendaftar Koordinator Layanan BK =================
 let coordFilter = 'menunggu_persetujuan';
+// ================= Admin: Konselor PAN-JALU =================
+let pjFilter = 'menunggu';
+const PJ_ST = { menunggu: ['Menunggu persetujuan', 'warn'], aktif: ['Aktif', 'ok'], ditolak: ['Ditolak', 'crit'], dicabut: ['Dicabut admin', ''], dilepas: ['Dilepas konselor', ''] };
+async function adminPanjalu() {
+  const d = await api(`/admin/panjalu${pjFilter !== 'semua' ? `?status=${pjFilter}` : ''}`);
+  const r = d.ringkasan;
+  const card = (c) => `<section class="card reg-card"><div class="row between wrap"><div><b>${esc(c.nama)}</b> <span class="chip ${PJ_ST[c.status][1]}">${PJ_ST[c.status][0]}</span> ${c.independen ? '<span class="chip">Independen</span>' : ''} ${c.status === 'aktif' ? `<span class="chip ${c.status_jaga ? 'ok' : ''}">${c.status_jaga ? 'Jaga' : 'Tidak jaga'}</span>` : ''}
+      <p class="small muted">${esc(c.email)} · <span class="mono">${esc(c.nip || '')}</span></p></div><small class="muted">Diajukan ${fmtDT(c.diajukan_pada)}</small></div>
+    <dl class="kv"><dt>Asal</dt><dd>${esc(c.asal)}</dd><dt>Profesi / spesialisasi</dt><dd>${esc([c.gelar, c.spesialisasi].filter(Boolean).join(' · ') || '—')}</dd><dt>Alasan & pengalaman</dt><dd>${esc(c.alasan || '—')}</dd>
+      <dt>Akun</dt><dd>${esc(c.status_akun.replace(/_/g, ' '))}${c.terakhir_masuk ? ` · terakhir masuk ${ago(c.terakhir_masuk)}` : ''}</dd>
+      ${c.status === 'aktif' ? `<dt>Konseli PAN-JALU</dt><dd><b>${c.konseli}</b> / kapasitas ${c.kapasitas}</dd>` : ''}
+      ${c.peninjau ? `<dt>Ditinjau</dt><dd>${esc(c.peninjau)} · ${c.ditinjau_pada ? fmtDT(c.ditinjau_pada) : ''}</dd>` : ''}${c.catatan ? `<dt>Catatan</dt><dd>${esc(c.catatan)}</dd>` : ''}</dl>
+    <div class="row wrap end">${c.status === 'menunggu' ? `<button class="btn primary sm" data-act="pjAdm" data-id="${c.id}" data-k="approve" data-cap="${c.kapasitas}">Setujui</button><button class="btn ghost sm" data-act="pjAdm" data-id="${c.id}" data-k="reject">Tolak</button>` : ''}
+      ${c.status === 'aktif' ? `<button class="btn ghost sm" data-act="pjAdm" data-id="${c.id}" data-k="cap" data-cap="${c.kapasitas}">Ubah kapasitas</button><button class="btn ghost sm" data-act="pjAdm" data-id="${c.id}" data-k="revoke">Cabut status</button>` : ''}</div></section>`;
+  return `<h1>Konselor PAN-JALU</h1>
+  <p class="muted">Konselor PAN-JALU melayani mahasiswa lintas kampus — terutama mahasiswa yang kampusnya belum memiliki konselor. Mahasiswa memilih sendiri Konselor PAN-JALU-nya dengan persetujuan akses data, dan dapat menggantinya kapan saja. Admin menyetujui, mengatur kapasitas konseli, dan mencabut status. Admin tidak melihat identitas konseli.</p>
+  <div class="kpis"><div class="kpi ${d.jumlah.menunggu ? 'warn' : ''}"><span>Pengajuan menunggu</span><b>${d.jumlah.menunggu || 0}</b></div><div class="kpi ok"><span>Konselor PAN-JALU aktif</span><b>${d.jumlah.aktif || 0}</b></div>
+    <div class="kpi"><span>Konseli PAN-JALU</span><b>${r.konseli_panjalu}</b></div><div class="kpi ${r.tanpa_layanan ? 'warn' : ''}"><span>Mahasiswa tanpa konselor di kampus tanpa konselor</span><b>${r.tanpa_layanan}</b><small>${r.kampus_tanpa_konselor} kampus</small></div>
+    <div class="kpi ${r.krisis_terbuka ? 'crit' : ''}"><span>Kasus darurat terbuka (ranah PAN-JALU)</span><b>${r.krisis_terbuka}</b></div></div>
+  <div class="chips">${[['menunggu', 'Menunggu'], ['aktif', 'Aktif'], ['ditolak', 'Ditolak'], ['dicabut', 'Dicabut'], ['dilepas', 'Dilepas'], ['semua', 'Semua']].map(([k, l]) => `<button class="chip-btn ${pjFilter === k ? 'on' : ''}" data-act="pjFilter" data-k="${k}">${l}</button>`).join('')}</div>
+  ${d.items.map(card).join('') || empty('Tidak ada data', pjFilter === 'menunggu' ? 'Belum ada pengajuan Konselor PAN-JALU yang menunggu.' : '')}`;
+}
+actions.pjFilter = (el) => { pjFilter = el.dataset.k; rerender(); };
+actions.pjAdm = (el) => {
+  const { id, k, cap } = el.dataset;
+  const T = { approve: ['Setujui Konselor PAN-JALU', 'Setujui', 'primary'], reject: ['Tolak pengajuan Konselor PAN-JALU', 'Tolak', 'crit'], revoke: ['Cabut status Konselor PAN-JALU', 'Cabut status', 'crit'], cap: ['Ubah kapasitas konseli', 'Simpan', 'primary'] }[k];
+  openModal(`<h3>${T[0]}</h3><form data-form="pjAdm" data-id="${id}" data-k="${k}" class="stack">
+    ${['approve', 'cap'].includes(k) ? `<label>Kapasitas konseli PAN-JALU<input name="kapasitas" type="number" min="1" max="500" value="${esc(cap || '50')}" required></label>` : ''}
+    ${k === 'revoke' ? '<p class="small">Seluruh konseli PAN-JALU konselor ini akan diberi tahu dan diminta memilih konselor baru; akses konselor ke data mereka berakhir. Konselor independen juga dinonaktifkan akunnya.</p>' : ''}
+    ${['reject', 'revoke'].includes(k) ? '<label>Alasan (dikirim ke konselor)<textarea name="catatan" rows="3" required minlength="5" maxlength="500"></textarea></label>' : ''}
+    ${k === 'approve' ? '<label>Catatan (opsional)<input name="catatan" maxlength="500"></label>' : ''}
+    <div class="row end"><button class="btn ${T[2]}" type="submit">${T[1]}</button></div></form>`);
+};
+forms.pjAdm = async (d, f) => {
+  const { id, k } = f.dataset; const body = { ...d, ...(d.kapasitas ? { kapasitas: Number(d.kapasitas) } : {}) };
+  const r = await (k === 'cap' ? api(`/admin/panjalu/${id}`, { method: 'PATCH', body }) : api(`/admin/panjalu/${id}/${k}`, { method: 'POST', body }));
+  closeModal(); toast({ approve: 'Konselor PAN-JALU disetujui.', reject: 'Pengajuan ditolak.', revoke: `Status dicabut; ${r.konseli_dilepas ?? 0} konseli diberi tahu.`, cap: 'Kapasitas diperbarui.' }[k]); rerender();
+};
+
 let coordTab = 'akun'; let claimFilter = 'menunggu';
 const CLAIM_ST = { menunggu: ['Menunggu persetujuan', 'warn'], disetujui: ['Disetujui · merangkap', 'ok'], ditolak: ['Ditolak', 'crit'], dibatalkan: ['Dibatalkan konselor', ''], dilepas: ['Dilepas konselor', ''], dicabut: ['Dicabut admin', ''] };
 async function coordRegistrants() {
@@ -1062,6 +1121,7 @@ export const staffViews = {
   'a/konten': { title: 'Konten Psikoedukasi', roles: A, render: adminContent },
   'a/home': { title: 'Web Home & Profil', roles: A, render: homeEditor },
   'a/koordinator': { title: 'Pendaftar Koordinator', roles: A, render: coordRegistrants },
+  'a/panjalu': { title: 'Konselor PAN-JALU', roles: A, render: adminPanjalu },
   'k/dashboard': { title: 'Dashboard Koordinator', roles: KO, render: coordDashboard },
   'k/konselor': { title: 'Verifikasi Konselor', roles: KO, render: registrants },
   'k/jadwal': { title: 'Jadwal Konselor', roles: KO, render: coordSchedule },

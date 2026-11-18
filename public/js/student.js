@@ -46,6 +46,8 @@ async function home() {
   return `
   <section class="hello"><div><span class="eyebrow">${greet()}</span><h1>${esc(firstName())}, bagaimana kabarmu hari ini? ${peer.aktif ? peerBadge : ''}</h1></div>
     <blockquote class="quote">“${esc(q[0])}”<cite>— ${esc(q[1])}</cite></blockquote></section>
+  ${state.user.perlu_pilih_konselor ? `<section class="card pj-invite"><div><h3>Pilih konselor pendampingmu</h3><p class="small">Konselor pendamping dapat melihat hasil asesmen dan perkembanganmu agar bisa mendampingimu lebih cepat, termasuk saat kamu butuh bantuan segera. Kamu bisa menggantinya kapan saja.</p></div>
+    <div class="row wrap"><button class="btn primary" data-act="pjOpen">Pilih konselor</button><button class="btn ghost sm" data-act="pjLater">Nanti saja</button></div></section>` : ''}
   ${scheduleNotice(sch)}
   ${list.length ? `<section class="card"><h3>Perkembangan Indeks Kekuatan Mental</h3>${list.length > 1 ? indexTrend(list, { height: 120 }) : '<p class="muted">Grafik muncul setelah kamu mengisi asesmen minimal dua kali.</p>'}</section>` : ''}
   ${progressBlock(prog, last)}
@@ -859,7 +861,7 @@ async function studentMessages() {
 export async function profileView() {
   const [me, consents] = await Promise.all([api('/users/me'), api('/consents/me')]);
   const isStudent = me.role === 'mahasiswa';
-  const camp = isStudent ? await api('/campus') : null;
+  const [camp, pj] = isStudent ? await Promise.all([api('/campus'), api('/panjalu-counselors')]) : [null, null];
   return `<h1>Profil & Privasi</h1><div class="grid-2">
   <section class="card"><h3>Data pribadi</h3><dl class="kv"><dt>Nama</dt><dd>${esc(me.nama)}</dd><dt>${isStudent ? 'NIM' : 'NIP/ID'}</dt><dd class="mono">${esc(me.nim_nip)}</dd>${me.universitas ? `<dt>Perguruan tinggi</dt><dd>${esc(me.universitas.nama)}</dd>` : ''}${me.prodi ? `<dt>Prodi</dt><dd>${esc(me.prodi.nama)} (${me.prodi.jenjang})</dd><dt>Fakultas</dt><dd>${esc(me.prodi.fakultas)}</dd><dt>Angkatan / kelas</dt><dd>${me.angkatan || '—'} / ${esc(me.kelas || '—')}</dd>` : ''}${me.koordinator ? `<dt>Jabatan</dt><dd>${esc(me.koordinator.jabatan || '—')}</dd><dt>Unit</dt><dd>${esc(me.koordinator.unit || '—')}</dd>` : ''}</dl>
     <form data-form="profileSave" class="stack"><label>Email (terverifikasi)<input id="pf_email" type="email" value="${esc(me.email || '')}" readonly></label><label>Telepon<input id="pf_tel" name="telepon" value="${esc(me.telepon || '')}"></label><label>Alamat<input id="pf_addr" name="alamat" value="${esc(me.alamat || '')}"></label>
@@ -870,8 +872,47 @@ export async function profileView() {
     <p class="small muted">Sesuai UU PDP kamu berhak meminta salinan, perbaikan, atau penghapusan datamu. Ajukan melalui Unit Layanan Konseling atau pesan ke konselor.</p>` : ''}</section></div>
   ${isStudent ? `<form data-form="myCounselors" class="card stack"><h3>Konselor pilihanku</h3><p class="small muted">Konselor yang kamu pilih menjadi pendamping utamamu: mereka dapat melihat hasil asesmenmu untuk mendampingimu, dan kamu dapat mendaftar konseling kepada mereka. Pilih maksimal 5.</p>
     ${camp.konselor.length ? `<div class="pick-list">${camp.konselor.map((c) => counselorPick(c, camp.konselor_saya.includes(c.id))).join('')}</div>` : '<p class="muted">Kampusmu belum memiliki konselor aktif.</p>'}
-    <div class="row end"><button class="btn primary" type="submit">Simpan pilihan</button></div></form>` : ''}`;
+    <div class="row end"><button class="btn primary" type="submit">Simpan pilihan</button></div></form>
+  <section class="card stack"><h3>Konselor PAN-JALU</h3><p class="small muted">Konselor PAN-JALU melayani mahasiswa dari kampus mana pun${pj.kampus_punya_konselor ? '' : ' — sangat dianjurkan karena kampusmu belum memiliki konselor di PAN-JALU'}. Kamu dapat memilih satu Konselor PAN-JALU dan menggantinya kapan saja; kewenangan akses datamu berpindah ke konselor yang baru.</p>
+    ${pjForm(pj, false)}</section>` : ''}`;
 }
+// ---- Konselor PAN-JALU: dipilih langsung oleh mahasiswa (lintas kampus), dapat diganti kapan saja ----
+const PJ_CONSENT = 'Saya setuju Konselor PAN-JALU yang saya pilih dapat mengakses data asesmen IKDKM-M dan perkembangan saya (jurnal, Refleksi GURU, riwayat konseling dengannya) untuk keperluan pendampingan. Bila saya mengganti atau melepas konselor ini, aksesnya berakhir dan berpindah ke konselor baru.';
+function pjCards(d) {
+  if (!d.items.length) return '<p class="muted">Belum ada Konselor PAN-JALU yang aktif. Kamu tetap dapat memakai seluruh fitur mandiri PAN-JALU; tombol SOS selalu tersedia.</p>';
+  return `<div class="pick-list">${d.items.map((c) => `<label class="pick ${c.id === d.saya ? 'match' : ''} ${c.penuh ? 'disabled' : ''}"><input type="radio" name="counselor_id" value="${c.id}" ${c.id === d.saya ? 'checked' : ''} ${c.penuh ? 'disabled' : ''}>
+    <span><b>${esc(c.nama)}</b>${c.gelar ? ` <small class="muted">${esc(c.gelar)}</small>` : ''}<small>${esc(c.spesialisasi || '')}</small>
+    <small class="muted">${esc(c.asal)}${c.sekampus ? ' · sekampus denganmu' : ''} · ${c.konseli}/${c.kapasitas} konseli</small>
+    ${c.id === d.saya ? '<small class="ok-text">Konselor PAN-JALU-mu saat ini</small>' : c.penuh ? '<small class="muted">Kuota konseli penuh</small>' : c.online ? '<small class="ok-text">Sedang daring</small>' : ''}</span></label>`).join('')}</div>`;
+}
+const pjForm = (d, modal) => `<form data-form="pjChoose" ${modal ? 'data-modal="1"' : ''} class="stack">${pjCards(d)}
+  ${d.items.length ? `<label class="check small"><input type="checkbox" name="setuju" value="1" required> ${esc(PJ_CONSENT)}</label>
+  <div class="row end wrap">${d.saya && !modal ? '<button type="button" class="btn ghost" data-act="pjRemove">Lepas Konselor PAN-JALU</button>' : ''}<button class="btn primary" type="submit">${d.saya ? 'Simpan pilihan' : 'Pilih konselor ini'}</button></div>` : ''}</form>`;
+actions.pjOpen = async () => {
+  const [d, camp] = await Promise.all([api('/panjalu-counselors'), api('/campus')]);
+  openModal(`<h3>Pilih konselor pendampingmu</h3>
+    ${camp.konselor?.length ? `<p class="small">Kampusmu memiliki ${camp.konselor.length} konselor kampus. Kamu dapat memilih konselor kampus di menu <a href="#/s/profil" data-act="closeModal">Profil</a>, atau memilih <b>Konselor PAN-JALU</b> di bawah ini.</p>` : '<p class="small">Kampusmu belum memiliki konselor di PAN-JALU. Pilih <b>Konselor PAN-JALU</b> — konselor yang disetujui PAN-JALU untuk mendampingi mahasiswa dari kampus mana pun.</p>'}
+    ${pjForm(d, true)}<div class="row end"><button class="btn ghost sm" data-act="pjLater">Nanti saja</button></div>`);
+};
+// Ajakan memilih konselor muncul otomatis saat masuk (sekali per sesi) bila belum memilih
+function pjAutoPrompt() {
+  if (!state.user?.perlu_pilih_konselor) return;
+  try { if (sessionStorage.getItem('pj_prompt')) return; sessionStorage.setItem('pj_prompt', '1'); } catch { /* */ }
+  actions.pjOpen().catch(() => {});
+}
+actions.pjLater = async () => { await api('/users/me/pilih-konselor-nanti', { method: 'POST', body: {} }); state.user.perlu_pilih_konselor = false; if (state.realUser) state.realUser.perlu_pilih_konselor = false; closeModal(); toast('Kamu bisa memilih konselor kapan saja di menu Profil.', 'info'); rerender(); };
+forms.pjChoose = async (d, f) => {
+  if (!d.counselor_id) return toast('Pilih salah satu konselor.', 'warn');
+  await api('/users/me/panjalu-counselor', { method: 'PUT', body: { counselor_id: d.counselor_id, setuju: !!d.setuju } });
+  state.user.perlu_pilih_konselor = false; if (state.realUser) state.realUser.perlu_pilih_konselor = false;
+  if (f.dataset.modal) closeModal();
+  toast('Konselor PAN-JALU dipilih. Konselor akan diberi tahu dan dapat mulai mendampingimu.'); rerender();
+};
+actions.pjRemove = async () => {
+  if (!(await confirmBox('Lepas Konselor PAN-JALU? Akses konselor tersebut ke data asesmen dan perkembanganmu akan berakhir.', { ok: 'Lepas konselor' }))) return;
+  await api('/users/me/panjalu-counselor', { method: 'PUT', body: { counselor_id: null } }); toast('Konselor PAN-JALU dilepas.'); rerender();
+};
+
 // Kartu konselor yang dapat dicentang (dipakai di pendaftaran dan profil)
 export const counselorPick = (c, on) => `<label class="pick ${c.cocok ? 'match' : ''}"><input type="checkbox" name="k_${c.id}" value="1" ${on ? 'checked' : ''}><span><b>${esc(c.nama)}</b>${c.gelar ? ` <small class="muted">${esc(c.gelar)}</small>` : ''}
   <small>${esc(c.spesialisasi || '')}</small><small class="muted">Konteks kerja: ${esc(c.konteks.ringkas)}</small>${c.cocok ? '<small class="ok-text">Sesuai prodimu</small>' : ''}${c.layanan_terbuka ? '' : '<small class="muted">Melayani konseling khusus mahasiswa binaan</small>'}</span></label>`;
@@ -881,7 +922,7 @@ forms.pwChange = async (d, f) => { await api('/users/me/password', { method: 'PO
 
 
 export const studentViews = {
-  's/home': { title: 'Beranda', roles: R, render: home },
+  's/home': { title: 'Beranda', roles: R, render: home, after: pjAutoPrompt },
   's/asesmen': { title: 'Asesmen IKDKM-M', roles: R, render: assessIntro },
   's/asesmen/hasil/:id': { title: 'Hasil Asesmen', roles: R, render: assessResult },
   's/workbook': { title: 'Refleksi GURU', roles: R, render: workbook },

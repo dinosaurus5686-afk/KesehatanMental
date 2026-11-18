@@ -50,7 +50,7 @@ function searchUniversities(q, limit = 20) {
   const where = words.map(() => '(nama LIKE ? OR kota LIKE ? OR id = ?)').join(' AND ');
   const p = words.flatMap((w) => [`%${w}%`, `%${w}%`, w]);
   // kampus yang sudah aktif memakai PAN-JALU ditampilkan lebih dulu
-  return all(`SELECT u.*, (SELECT COUNT(*) FROM users x WHERE x.university_id = u.id AND x.status = 'aktif') AS pengguna FROM universities u WHERE ${where} ORDER BY pengguna DESC, (nama LIKE 'Universitas%') DESC, nama LIMIT ?`, ...p, limit)
+  return all(`SELECT u.*, (SELECT COUNT(*) FROM users x WHERE x.university_id = u.id AND x.status = 'aktif') AS pengguna FROM universities u WHERE ${where} AND COALESCE(u.status, '') != 'LAYANAN' ORDER BY pengguna DESC, (nama LIKE 'Universitas%') DESC, nama LIMIT ?`, ...p, limit)
     .map((u) => ({ ...universityView(u), terdaftar: u.pengguna > 0 }));
 }
 
@@ -77,15 +77,34 @@ function campusCounselors(uid, prodiId = null) {
     .map((c) => { const k = counselorContext(c); const cocok = !!prodiId && (k.prodi.includes(prodiId) || (!!p && k.fakultas.includes(p.fakultas_kode))); return { id: c.id, nama: c.nama, gelar: c.gelar, spesialisasi: c.spesialisasi, konteks: k, layanan_terbuka: !!c.layanan_terbuka, cocok }; })
     .sort((a, b) => b.cocok - a.cocok);
 }
-const myCounselorIds = (studentId) => all('SELECT counselor_id FROM student_counselors WHERE student_id = ?', studentId).map((x) => x.counselor_id);
+const myCounselorIds = (studentId) => all("SELECT counselor_id FROM student_counselors WHERE student_id = ? AND jenis = 'kampus'", studentId).map((x) => x.counselor_id);
+// Konselor kampus pilihan mahasiswa (pilihan Konselor PAN-JALU disimpan terpisah, jenis = 'panjalu')
 function setStudentCounselors(studentId, uid, ids) {
+  const pj = get("SELECT counselor_id FROM student_counselors WHERE student_id = ? AND jenis = 'panjalu'", studentId)?.counselor_id;
   const valid = new Set(campusCounselors(uid).map((c) => c.id));
-  const keep = [...new Set((Array.isArray(ids) ? ids : []).filter((x) => valid.has(x)))].slice(0, 5);
-  tx(() => { run('DELETE FROM student_counselors WHERE student_id = ?', studentId); for (const c of keep) insert('student_counselors', { student_id: studentId, counselor_id: c }); });
+  const keep = [...new Set((Array.isArray(ids) ? ids : []).filter((x) => valid.has(x) && x !== pj))].slice(0, 5);
+  tx(() => {
+    run("DELETE FROM student_counselors WHERE student_id = ? AND jenis = 'kampus'", studentId);
+    for (const c of keep) insert('student_counselors', { student_id: studentId, counselor_id: c, jenis: 'kampus' });
+    if (keep.length) run('UPDATE users SET pilih_konselor_pada = COALESCE(pilih_konselor_pada, ?) WHERE id = ?', nowIso(), studentId);
+  });
   return keep;
 }
+// Kampus yang belum ada di daftar PT: dibuat sebagai "usulan" (dipakai bersama mahasiswa lain dari kampus yang sama)
+function proposeUniversity(nama, kota) {
+  nama = String(nama || '').trim().replace(/\s+/g, ' ').slice(0, 160); kota = String(kota || '').trim().slice(0, 80) || null;
+  if (nama.length < 5) return null;
+  const ada = get('SELECT id FROM universities WHERE lower(nama) = lower(?)', nama);
+  if (ada) return ada.id;
+  let id; do { id = 'U' + String(Math.floor(Math.random() * 1e6)).padStart(6, '0'); } while (get('SELECT 1 AS x FROM universities WHERE id = ?', id));
+  insert('universities', { id, nama, kota, provinsi: null, status: 'USULAN', alamat: null });
+  return id;
+}
+// Akun Konselor PAN-JALU independen (tidak terikat kampus) dicatat pada "kampus" virtual ini
+const PANJALU_UNI = 'PANJALU';
+function ensurePanjaluUni() { if (!get('SELECT 1 AS x FROM universities WHERE id = ?', PANJALU_UNI)) insert('universities', { id: PANJALU_UNI, nama: 'PAN-JALU (Konselor independen)', kota: null, provinsi: null, status: 'LAYANAN', alamat: null }); }
 
 // SOS per kampus (diatur Koordinator Layanan BK kampus)
 const sosOf = (uid) => ({ ...(getConfig(`sos:${uid}`, null) || getConfig('sos', {})), aktif: uid ? getConfig(`sos_aktif:${uid}`, true) : true });
 
-module.exports = { UNP, ensureUniversities, migrateCampus, universityName, universityView, searchUniversities, campusProdi, campusFaculties, facultyCode, prodiView, counselorContext, campusCounselors, myCounselorIds, setStudentCounselors, sosOf };
+module.exports = { UNP, ensureUniversities, migrateCampus, universityName, universityView, searchUniversities, campusProdi, campusFaculties, facultyCode, prodiView, counselorContext, campusCounselors, myCounselorIds, setStudentCounselors, proposeUniversity, PANJALU_UNI, ensurePanjaluUni, sosOf };

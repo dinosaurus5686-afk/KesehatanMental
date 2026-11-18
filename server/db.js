@@ -7,8 +7,8 @@ const { DATA_DIR, uuid } = require('./security');
 const db = new DatabaseSync(process.env.MC_DB_FILE || path.join(DATA_DIR, 'panjalu.db'));
 // Audit log disimpan di berkas terpisah dan bersifat append-only (Bab 10.4).
 const auditDb = new DatabaseSync(process.env.MC_AUDIT_FILE || path.join(DATA_DIR, 'audit.db'));
-const SCHEMA_VERSION = 6; // v4: IKDKM-M & Refleksi GURU; v5: Koordinator Layanan BK; v6: multi-kampus, pustaka konten admin, konselor pilihan mahasiswa
-const MIGRATABLE = [4, 5]; // versi lama yang dimigrasi otomatis tanpa menghapus data
+const SCHEMA_VERSION = 7; // v4: IKDKM-M & Refleksi GURU; v5: Koordinator Layanan BK; v6: multi-kampus, pustaka konten admin, konselor pilihan mahasiswa; v7: Konselor PAN-JALU lintas kampus
+const MIGRATABLE = [4, 5, 6]; // versi lama yang dimigrasi otomatis tanpa menghapus data
 
 db.exec('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;');
 {
@@ -94,6 +94,9 @@ CREATE TABLE IF NOT EXISTS coordinator_claims (${T}, user_id TEXT NOT NULL REFER
   ditinjau_oleh TEXT REFERENCES users(id), ditinjau_pada TEXT, catatan TEXT);
 CREATE INDEX IF NOT EXISTS ix_cclaim_user ON coordinator_claims(user_id, status);
 CREATE INDEX IF NOT EXISTS ix_cclaim_uni ON coordinator_claims(university_id, status);
+CREATE TABLE IF NOT EXISTS panjalu_counselors (${T}, user_id TEXT UNIQUE NOT NULL REFERENCES users(id), alasan TEXT, independen INTEGER NOT NULL DEFAULT 0,
+  status TEXT NOT NULL DEFAULT 'menunggu' CHECK (status IN ('menunggu','aktif','ditolak','dicabut','dilepas')),
+  kapasitas INTEGER NOT NULL DEFAULT 50, ditinjau_oleh TEXT REFERENCES users(id), ditinjau_pada TEXT, catatan TEXT, diajukan_pada TEXT);
 CREATE TABLE IF NOT EXISTS counselor_slots (${T}, counselor_id TEXT NOT NULL REFERENCES users(id), hari INTEGER NOT NULL CHECK (hari BETWEEN 1 AND 7), jam_mulai TEXT NOT NULL, jam_selesai TEXT NOT NULL,
   jenis_layanan TEXT NOT NULL, mode TEXT NOT NULL CHECK (mode IN ('online','offline','keduanya')), kuota INTEGER NOT NULL DEFAULT 1, lokasi TEXT, aktif INTEGER NOT NULL DEFAULT 1);
 CREATE TABLE IF NOT EXISTS counselor_consents (${T}, counselor_id TEXT UNIQUE NOT NULL REFERENCES users(id), versi INTEGER NOT NULL DEFAULT 1,
@@ -158,6 +161,9 @@ CREATE INDEX IF NOT EXISTS ix_views_user ON content_views(user_id, waktu);
   // Analisis keterlibatan konten (admin): durasi membaca/menonton & waktu terbit
   add('content_views', 'durasi_detik', 'INTEGER');
   add('content_items', 'diterbitkan_pada', 'TEXT');
+  // v7: Konselor PAN-JALU (lintas kampus) — jenis pilihan konselor & penanda pemilihan konselor saat login pertama
+  add('student_counselors', 'jenis', "TEXT NOT NULL DEFAULT 'kampus'");
+  add('users', 'pilih_konselor_pada', 'TEXT');
   db.exec('CREATE INDEX IF NOT EXISTS ix_views_content ON content_views(content_id, waktu)');
   db.exec('CREATE INDEX IF NOT EXISTS ix_users_univ ON users(university_id, role); CREATE INDEX IF NOT EXISTS ix_prodi_univ ON prodi(university_id); CREATE INDEX IF NOT EXISTS ix_sc_c ON student_counselors(counselor_id)');
 }

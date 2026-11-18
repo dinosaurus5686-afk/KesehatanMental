@@ -158,7 +158,12 @@ async function registerView({ role } = {}) {
         <label>Unit kerja<input id="rg_unit" name="unit" placeholder="UPT Bimbingan & Konseling"></label>`
       : `<label>Profesi / lisensi<input id="rg_prof" name="profesi" placeholder="Psikolog Klinis (SIPP) / Guru BK"></label>
         <label>Spesialisasi<input id="rg_spec" name="spesialisasi" placeholder="Kecemasan, akademik, keluarga…" required></label>
-        <p class="full small muted">Setelah akun disetujui Koordinator Layanan BK kampus Anda, atur fakultas & prodi yang menjadi tanggung jawab Anda di menu <b>Konseling</b>.</p>`}
+        <p class="full small muted">Setelah akun disetujui Koordinator Layanan BK kampus Anda, atur fakultas & prodi yang menjadi tanggung jawab Anda di menu <b>Konseling</b>.</p>
+        <fieldset class="full pj-box"><legend>Konselor PAN-JALU (lintas kampus)</legend>
+          <p class="small muted">Konselor PAN-JALU dapat dipilih langsung oleh mahasiswa dari kampus mana pun, terutama mahasiswa yang kampusnya belum memiliki konselor. Wajib disetujui admin PAN-JALU.</p>
+          <label class="check"><input type="checkbox" name="independen" value="1" data-change="pjIndep"> Saya konselor/psikolog independen (tidak terikat kampus) dan mendaftar sebagai Konselor PAN-JALU</label>
+          <label class="check"><input type="checkbox" name="ajukan_panjalu" value="1" data-change="pjToggle"> Ajukan juga akun kampus saya sebagai Konselor PAN-JALU</label>
+          <label id="pj_alasan" hidden>Alasan & pengalaman pendampingan<textarea name="alasan_panjalu" rows="2" maxlength="1000" placeholder="Contoh: psikolog klinis berlisensi (SIPP …), 5 tahun mendampingi mahasiswa."></textarea></label></fieldset>`}
       <label>Nomor telepon/WhatsApp<input id="rg_tel" name="telepon" inputmode="tel" autocomplete="tel"></label>
       <label>Kata sandi<input id="rg_pw" name="password" type="password" minlength="8" required autocomplete="new-password" data-input="pwHint"></label>
       <label>Ulangi kata sandi<input id="rg_pw2" name="password2" type="password" minlength="8" required autocomplete="new-password"></label>
@@ -178,7 +183,9 @@ inputHandlers.uniSearch = (el) => {
   uniTimer = setTimeout(async () => {
     const list = await api(`/public/universities?q=${encodeURIComponent(q)}`);
     if (el.value.trim() !== q) return;
-    box.innerHTML = list.length ? list.map((u) => `<button type="button" class="uni-opt" data-act="uniPick" data-id="${u.id}" role="option"><b>${esc(u.nama)}</b><small>${esc(u.kota || '')}${u.provinsi ? `, ${esc(u.provinsi.replace(/^Prov\. /, ''))}` : ''} · ${esc(u.status || '')}${u.terdaftar ? ' · <span class="ok-text">sudah memakai PAN-JALU</span>' : ''}</small></button>`).join('') : '<p class="small muted">Tidak ditemukan. Coba kata lain (mis. nama kota).</p>';
+    const mhs = document.querySelector('form[data-form=register]')?.dataset.role === 'mahasiswa';
+    box.innerHTML = (list.length ? list.map((u) => `<button type="button" class="uni-opt" data-act="uniPick" data-id="${u.id}" role="option"><b>${esc(u.nama)}</b><small>${esc(u.kota || '')}${u.provinsi ? `, ${esc(u.provinsi.replace(/^Prov\. /, ''))}` : ''} · ${esc(u.status === 'USULAN' ? 'diusulkan mahasiswa' : u.status || '')}${u.terdaftar ? ' · <span class="ok-text">sudah memakai PAN-JALU</span>' : ''}</small></button>`).join('') : '<p class="small muted">Tidak ditemukan. Coba kata lain (mis. nama kota).</p>')
+      + (mhs ? '<button type="button" class="uni-opt other" data-act="uniOther"><b>Kampus saya tidak ada di daftar</b><small>Tulis nama kampusmu — kamu tetap bisa memakai PAN-JALU dan memilih Konselor PAN-JALU</small></button>' : '');
   }, 250);
 };
 actions.uniPick = async (el) => {
@@ -191,6 +198,22 @@ actions.uniPick = async (el) => {
     ${role !== 'mahasiswa' && !UNI.koordinator_aktif ? `<div class="notice warn small">Kampus ini belum memiliki Koordinator Layanan BK di PAN-JALU. ${role === 'konselor' ? 'Pendaftaran Anda akan ditinjau setelah koordinator kampus aktif.' : 'Anda bisa menjadi koordinator pertama.'}</div>` : ''}`;
   if (role === 'mahasiswa') renderCampus();
 };
+actions.uniOther = () => {
+  const q = document.getElementById('rg_uni_q').value.trim();
+  UNI = { id: '', baru: true, nama: q, prodi: [], fakultas: [], konselor: [] };
+  document.getElementById('rg_uni').value = '';
+  document.getElementById('uniResults').innerHTML = '';
+  document.getElementById('uniPicked').innerHTML = `<div class="form-grid inner"><label class="full">Nama perguruan tinggi<input name="kb_nama" required minlength="5" maxlength="160" value="${esc(q)}" placeholder="Universitas …"></label><label class="full">Kota/kabupaten<input name="kb_kota" maxlength="80"></label></div>
+    <div class="notice info small">Kampusmu akan dicatat sebagai kampus baru di PAN-JALU. Karena belum ada konselor kampus, kamu dapat memilih <b>Konselor PAN-JALU</b> setelah masuk.</div>`;
+  renderCampus();
+};
+changeHandlers.pjToggle = (el) => { document.getElementById('pj_alasan').hidden = !el.checked && !document.querySelector('input[name=independen]').checked; };
+changeHandlers.pjIndep = (el) => {
+  const f = el.form; const uni = f.querySelector('.uni-field');
+  uni.hidden = el.checked; f.querySelector('#rg_uni_q').required = false;
+  const aj = f.querySelector('input[name=ajukan_panjalu]'); aj.disabled = el.checked; if (el.checked) aj.checked = true;
+  document.getElementById('pj_alasan').hidden = !el.checked && !aj.checked;
+};
 function renderCampus(prodiId = '') {
   const box = document.getElementById('rg_campus'); if (!box || !UNI) return;
   const fak = UNI.fakultas.map((f) => ({ ...f, prodi: UNI.prodi.filter((p) => p.fakultas_kode === f.kode) }));
@@ -199,8 +222,8 @@ function renderCampus(prodiId = '') {
       <option value="__baru" ${prodiId === '__baru' ? 'selected' : ''}>Prodi saya belum ada di daftar…</option></select></label>
     ${prodiId === '__baru' || !UNI.prodi.length ? `<label>Nama program studi<input name="pb_nama" required minlength="3" placeholder="Pendidikan Matematika"></label><label>Fakultas<input name="pb_fak" placeholder="Fakultas Keguruan dan Ilmu Pendidikan"></label>
       <label>Jenjang<select name="pb_jenjang">${['S1', 'D3', 'D4', 'S2', 'S3', 'Profesi'].map((j) => `<option>${j}</option>`).join('')}</select></label><p class="small muted full">Koordinator Layanan BK kampusmu akan merapikan nama prodi ini.</p>` : ''}</div>
-    <fieldset class="full"><legend>Pilih konselor pendampingmu (boleh lebih dari satu)</legend>
-      ${UNI.konselor.length ? `<p class="small muted">Konselor yang kamu pilih dapat melihat hasil asesmenmu untuk mendampingimu. Konselor dengan konteks kerja sesuai prodimu ditandai <span class="ok-text">Sesuai prodimu</span>. Pilihan dapat diubah nanti di menu Profil.</p><div class="pick-list">${UNI.konselor.map((c) => counselorPick(c, false)).join('')}</div>` : '<p class="small muted">Kampus ini belum memiliki konselor aktif di PAN-JALU. Kamu tetap bisa mendaftar dan memilih konselor nanti di menu Profil.</p>'}</fieldset>`;
+    <fieldset class="full"><legend>Konselor pendamping (opsional — boleh dipilih nanti)</legend>
+      ${UNI.konselor.length ? `<p class="small muted">Kamu boleh <b>tidak memilih sekarang</b>; saat pertama masuk kamu akan diajak memilih konselor kampus atau Konselor PAN-JALU. Konselor yang kamu pilih dapat melihat hasil asesmenmu untuk mendampingimu. Konselor dengan konteks kerja sesuai prodimu ditandai <span class="ok-text">Sesuai prodimu</span>.</p><div class="pick-list">${UNI.konselor.map((c) => counselorPick(c, false)).join('')}</div>` : '<p class="small muted">Kampus ini belum memiliki konselor aktif di PAN-JALU. Setelah masuk, kamu dapat memilih <b>Konselor PAN-JALU</b> — konselor PAN-JALU yang melayani mahasiswa dari kampus mana pun.</p>'}</fieldset>`;
 }
 changeHandlers.prodiPick = async (el) => {
   if (el.value && el.value !== '__baru') { const d = await api(`/public/universities/${UNI.id}?prodi=${el.value}`); UNI.konselor = d.konselor; }
@@ -210,10 +233,13 @@ changeHandlers.prodiPick = async (el) => {
 };
 forms.register = async (d, f) => {
   if (d.password !== d.password2) return toast('Ulangan kata sandi tidak sama.', 'warn');
-  if (!d.university_id) return toast('Pilih perguruan tinggi dari daftar pencarian.', 'warn');
-  const body = { ...d, role: f.dataset.role, persetujuan: !!d.persetujuan, angkatan: Number(d.angkatan), konselor_ids: Object.keys(d).filter((k) => k.startsWith('k_')).map((k) => k.slice(2)) };
+  const indep = f.dataset.role === 'konselor' && !!d.independen;
+  if (!d.university_id && !indep && !(UNI?.baru && d.kb_nama)) return toast('Pilih perguruan tinggi dari daftar pencarian, atau pilih "Kampus saya tidak ada di daftar".', 'warn');
+  if ((indep || d.ajukan_panjalu) && (d.alasan_panjalu || '').trim().length < 10) return toast('Tuliskan alasan & pengalaman Anda sebagai Konselor PAN-JALU (minimal 10 karakter).', 'warn');
+  const body = { ...d, role: f.dataset.role, persetujuan: !!d.persetujuan, independen: indep, ajukan_panjalu: !!d.ajukan_panjalu || indep,
+    ...(UNI?.baru && !d.university_id ? { kampus_baru: { nama: d.kb_nama, kota: d.kb_kota } } : {}), angkatan: Number(d.angkatan), konselor_ids: Object.keys(d).filter((k) => k.startsWith('k_')).map((k) => k.slice(2)) };
   if (body.prodi_id === '__baru' || (f.dataset.role === 'mahasiswa' && !body.prodi_id && d.pb_nama)) { body.prodi_id = ''; body.prodi_baru = { nama: d.pb_nama, fakultas: d.pb_fak, jenjang: d.pb_jenjang }; }
-  for (const k of Object.keys(body)) if (/^(k_|pb_)/.test(k)) delete body[k];
+  for (const k of Object.keys(body)) if (/^(k_|pb_|kb_)/.test(k)) delete body[k];
   delete body.password2;
   const r = await api('/auth/register', { method: 'POST', body });
   setPending(r.email); state.mailMode = r.mail_mode;

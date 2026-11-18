@@ -1044,3 +1044,16 @@ form[data-form="psiQual"] label { display: grid; gap: .2rem; margin: .4rem 0; fo
 .mode-switch { display: grid; grid-template-columns: 1fr 1fr; gap: 3px; margin: .2rem .9rem .8rem; padding: 3px; border-radius: 12px; background: rgba(255,255,255,.14); }
 .mode-switch button { border: 0; border-radius: 9px; padding: .45rem .3rem; font: 700 .76rem var(--font); color: rgba(255,255,255,.85); background: transparent; cursor: pointer; }
 .mode-switch button.on { background: #fff; color: var(--accent); box-shadow: 0 2px 6px rgba(0,0,0,.12); }
+
+/* Konselor PAN-JALU */
+.pj-invite { display: flex; gap: 1rem; align-items: center; justify-content: space-between; flex-wrap: wrap; border-left: 4px solid var(--accent); }
+.pj-invite h3 { margin: 0 0 .25rem; }
+.pj-box { border: 1px dashed var(--line); border-radius: 12px; padding: .7rem .9rem; display: grid; gap: .45rem; }
+.pj-box legend { font-weight: 700; padding: 0 .3rem; }
+.pick.disabled { opacity: .55; }
+.uni-opt.other { border-style: dashed; }
+details.claim-card { display: block; }
+details.claim-card > summary { list-style: none; cursor: pointer; display: flex; gap: .8rem; align-items: center; }
+details.claim-card > summary::-webkit-details-marker { display: none; }
+details.claim-card[open] > div { margin-top: .8rem; }
+details.claim-card .claim-ico { font-size: 1.4rem; width: 2.4rem; height: 2.4rem; }

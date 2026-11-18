@@ -11,6 +11,7 @@ const services = require('./services');
 
 const campus = require('./campus');
 campus.ensureUniversities(); // daftar perguruan tinggi nasional
+campus.ensurePanjaluUni(); // akun Konselor PAN-JALU independen
 campus.migrateCampus(); // data lama → kampus UNP Kediri (sekali saja)
 require('./instrument').apply(); // pengaturan instrumen dari menu Psikometrik (norma, kalimat interpretasi)
 ensureSeeded({ demo: process.env.MC_DEMO !== '0' });
@@ -62,6 +63,7 @@ app.use('/api', authenticate, require('./routes/staff'));
 app.use('/api', authenticate, require('./routes/admin'));
 app.use('/api', authenticate, require('./routes/coord'));
 app.use('/api', authenticate, require('./routes/klaim'));
+app.use('/api', authenticate, require('./routes/panjalu'));
 app.use('/api', authenticate, require('./routes/psikometri'));
 app.use('/api', authenticate, require('./routes/monitoring'));
 app.use('/api', (_req, res) => res.status(404).json({ error: 'Endpoint tidak ditemukan.' }));

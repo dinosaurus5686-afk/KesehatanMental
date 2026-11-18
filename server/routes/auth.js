@@ -36,6 +36,9 @@ function publicUser(u) {
     universitas: campus.universityView(uni),
     konselor: c ? { spesialisasi: c.spesialisasi, status_jaga: !!c.status_jaga, lingkup_fakultas: JSON.parse(c.lingkup_fakultas), lingkup_prodi: JSON.parse(c.lingkup_prodi || '[]'), layanan_terbuka: !!c.layanan_terbuka } : null,
     koordinator: k ? { jabatan: k.jabatan, unit: k.unit } : null,
+    konselor_panjalu: u.role === 'konselor' ? (get('SELECT status, catatan, independen, kapasitas, ditinjau_pada FROM panjalu_counselors WHERE user_id = ?', u.id) || null) : null,
+    // Mahasiswa yang belum memilih konselor (kampus maupun PAN-JALU) diminta memilih saat masuk
+    perlu_pilih_konselor: u.role === 'mahasiswa' && !u.pilih_konselor_pada && !get('SELECT 1 AS x FROM student_counselors WHERE student_id = ?', u.id),
     rangkap_koordinator: u.role === 'konselor' ? (get("SELECT status, catatan, created_at, ditinjau_pada FROM coordinator_claims WHERE user_id = ? ORDER BY created_at DESC LIMIT 1", u.id) || null) : null,
   };
 }
@@ -119,8 +122,16 @@ r.post('/auth/register', registerLimiter, async (req, res) => {
     }
     fail(409, existing.email === v.email ? 'Email sudah terdaftar. Silakan masuk atau gunakan "Lupa kata sandi".' : `${role === 'mahasiswa' ? 'NIM' : 'NIP'} sudah terdaftar.`);
   }
-  const uni = get('SELECT id FROM universities WHERE id = ?', str(b.university_id, 12));
-  if (!uni) fail(400, 'Pilih perguruan tinggi Anda dari daftar.');
+  // Konselor independen (tidak terikat kampus) mendaftar langsung sebagai Konselor PAN-JALU; disetujui admin
+  const independen = role === 'konselor' && !!b.independen;
+  const ajukanPanjalu = role === 'konselor' && (independen || !!b.ajukan_panjalu);
+  const alasanPj = str(b.alasan_panjalu, 1000);
+  if (ajukanPanjalu && alasanPj.length < 10) fail(400, 'Tuliskan alasan/pengalaman Anda sebagai Konselor PAN-JALU (minimal 10 karakter).');
+  let uniId = independen ? campus.PANJALU_UNI : str(b.university_id, 12);
+  // Mahasiswa dari kampus yang belum ada di daftar: kampus diusulkan dari nama yang diketik
+  if (!uniId && role === 'mahasiswa' && b.kampus_baru) uniId = campus.proposeUniversity(b.kampus_baru?.nama, b.kampus_baru?.kota) || fail(400, 'Tuliskan nama perguruan tinggi lengkap (minimal 5 karakter).');
+  const uni = get('SELECT id FROM universities WHERE id = ?', uniId);
+  if (!uni || (!independen && uni.id === campus.PANJALU_UNI)) fail(400, 'Pilih perguruan tinggi Anda dari daftar.');
   let prodiId = null; let angkatan = null; let prodiBaru = null;
   if (role === 'mahasiswa') {
     prodiId = str(b.prodi_id, 40);
@@ -152,6 +163,7 @@ r.post('/auth/register', registerLimiter, async (req, res) => {
         jenis_layanan_aktif: JSON.stringify(['Konseling Individu', 'Konseling Daring']),
       });
     }
+    if (ajukanPanjalu) insert('panjalu_counselors', { user_id: id, alasan: alasanPj, independen: independen ? 1 : 0, status: 'menunggu', diajukan_pada: nowIso() });
     insert('consents', { user_id: id, jenis_consent: 'layanan_umum', disetujui_pada: nowIso(), versi_kebijakan: getConfig('versi_kebijakan', 'v1'), alamat_ip: req.ip });
     if (role === 'mahasiswa') campus.setStudentCounselors(id, uni.id, b.konselor_ids);
     return get('SELECT * FROM users WHERE id = ?', id);
@@ -167,7 +179,9 @@ const REVIEW = {
   koordinator: { peran: 'koordinator layanan BK', peninjau: 'admin', pemeriksa: [['admin', '#/a/koordinator', false]] },
 };
 function completeVerification(user) {
-  const rv = REVIEW[user.role];
+  // Konselor independen tidak memiliki koordinator kampus: akunnya ditinjau admin bersama pengajuan Konselor PAN-JALU
+  const rv = user.role === 'konselor' && user.university_id === campus.PANJALU_UNI
+    ? { peran: 'Konselor PAN-JALU', peninjau: 'admin PAN-JALU', pemeriksa: [['admin', '#/a/panjalu', false]] } : REVIEW[user.role];
   const status = rv ? 'menunggu_persetujuan' : 'aktif';
   update('users', user.id, { status, aktif: status === 'aktif' ? 1 : 0, email_verified_at: nowIso() });
   if (rv) {
@@ -181,6 +195,10 @@ function completeVerification(user) {
       // Kampus belum punya koordinator: admin diberi tahu agar mengaktifkan koordinator kampus tersebut
       if (perKampus && !list.length) for (const a of all("SELECT id FROM users WHERE role = 'admin' AND status = 'aktif'")) notify(a.id, { tipe: 'pendaftar', judul: `Pendaftar ${rv.peran} menunggu koordinator kampus`, isi: `${user.nama} (${campus.universityName(user.university_id) || '-'}) menunggu, tetapi kampus ini belum memiliki Koordinator Layanan BK aktif.`, tautan: '#/a/koordinator' });
     }
+  }
+  // Konselor kampus yang juga mengajukan diri sebagai Konselor PAN-JALU: admin diberi tahu
+  if (user.role === 'konselor' && user.university_id !== campus.PANJALU_UNI && get("SELECT 1 AS x FROM panjalu_counselors WHERE user_id = ? AND status = 'menunggu'", user.id)) {
+    for (const a of all("SELECT id FROM users WHERE role = 'admin' AND status = 'aktif'")) notify(a.id, { tipe: 'pendaftar', judul: 'Pengajuan Konselor PAN-JALU', isi: `${user.nama} (${campus.universityName(user.university_id) || '-'}) mengajukan diri sebagai Konselor PAN-JALU.`, tautan: '#/a/panjalu' });
   }
   audit({ actor: user, aksi: 'email_terverifikasi', entitas: 'users', entitas_id: user.id });
   return status;
