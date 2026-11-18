@@ -61,6 +61,7 @@ app.use('/api', authenticate, require('./routes/counseling').router);
 app.use('/api', authenticate, require('./routes/staff'));
 app.use('/api', authenticate, require('./routes/admin'));
 app.use('/api', authenticate, require('./routes/coord'));
+app.use('/api', authenticate, require('./routes/klaim'));
 app.use('/api', authenticate, require('./routes/psikometri'));
 app.use('/api', authenticate, require('./routes/monitoring'));
 app.use('/api', (_req, res) => res.status(404).json({ error: 'Endpoint tidak ditemukan.' }));

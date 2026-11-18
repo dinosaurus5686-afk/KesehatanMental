@@ -11,7 +11,11 @@ function authenticate(req, _res, next) {
   if (!payload) return next(new HttpError(401, 'Sesi tidak valid atau sudah berakhir. Silakan masuk kembali.', 'UNAUTHENTICATED'));
   const user = get('SELECT * FROM users WHERE id = ?', payload.sub);
   if (!user || !user.aktif || user.token_version !== payload.tv) return next(new HttpError(401, 'Sesi telah dicabut. Silakan masuk kembali.', 'UNAUTHENTICATED'));
-  req.user = user;
+  // Konselor yang klaim rangkap Koordinator Layanan BK-nya disetujui admin dapat bertindak sebagai koordinator
+  // dengan header "X-Peran: koordinator" (dipilih lewat pengalih mode di aplikasi). Status klaim diperiksa ulang setiap permintaan.
+  if (req.headers['x-peran'] === 'koordinator' && user.role === 'konselor' && get("SELECT 1 AS x FROM coordinator_claims WHERE user_id = ? AND status = 'disetujui'", user.id)) {
+    req.user = { ...user, role: 'koordinator', peran_asli: 'konselor', rangkap: true };
+  } else req.user = user;
   next();
 }
 

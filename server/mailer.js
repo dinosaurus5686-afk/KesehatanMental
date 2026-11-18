@@ -59,6 +59,8 @@ const mails = {
     `Halo ${nama},\n\nAkun ${peran} Anda disetujui. Masuk: ${appUrl()}/#/masuk`),
   konselorDitolak: (to, nama, alasan, peran = 'konselor') => send(to, `Pendaftaran ${peran} PAN-JALU belum dapat disetujui`, layout('Pendaftaran belum disetujui', `<p>Halo ${esc(nama)},</p><p>Mohon maaf, pendaftaran Anda sebagai ${esc(peran)} belum dapat disetujui.</p><p><b>Alasan:</b> ${esc(alasan)}</p><p>Silakan hubungi Unit Layanan Konseling untuk informasi lebih lanjut.</p>`),
     `Halo ${nama},\n\nPendaftaran ${peran} belum dapat disetujui.\nAlasan: ${alasan}`),
+  klaimKoordinator: (to, nama, kampus) => send(to, 'Pengajuan rangkap Koordinator Layanan BK', layout('Pengajuan Koordinator Layanan BK', `<p>${esc(nama)}, konselor di ${esc(kampus)}, mengajukan diri untuk merangkap sebagai Koordinator Layanan BK karena kampusnya belum memiliki koordinator.</p><p>Tinjau dan putuskan pengajuan ini di menu Pendaftar Koordinator.</p>${btn(`${appUrl()}/#/a/koordinator`, 'Tinjau pengajuan')}`),
+    `${nama} (${kampus}) mengajukan diri merangkap Koordinator Layanan BK. Tinjau: ${appUrl()}/#/a/koordinator`),
   pendaftarBaru: (to, nama, peran = 'konselor', tautan = '#/a/pendaftar') => send(to, `Pendaftar ${peran} baru menunggu persetujuan`, layout(`Pendaftar ${peran} baru`, `<p>${esc(nama)} telah memverifikasi email dan menunggu persetujuan Anda.</p>${btn(`${appUrl()}/${tautan}`, 'Tinjau pendaftar')}`),
     `${nama} menunggu persetujuan sebagai ${peran}: ${appUrl()}/${tautan}`),
 };

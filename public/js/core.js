@@ -5,14 +5,23 @@ export const state = { token: null, user: null, ref: null, pub: null, socket: nu
 let refreshing = null;
 async function refresh() {
   if (!refreshing) refreshing = fetch('/api/auth/refresh', { method: 'POST', credentials: 'same-origin' })
-    .then(async (r) => { if (!r.ok) throw new Error('expired'); const d = await r.json(); state.token = d.access_token; state.user = d.user; return d; })
+    .then(async (r) => { if (!r.ok) throw new Error('expired'); const d = await r.json(); state.token = d.access_token; setUser(d.user); return d; })
     .finally(() => { setTimeout(() => { refreshing = null; }, 0); });
   return refreshing;
+}
+// Konselor yang disetujui merangkap Koordinator Layanan BK dapat berpindah mode; pada mode koordinator aplikasi
+// memakai peran koordinator dan setiap permintaan API membawa header "X-Peran: koordinator" (diverifikasi server).
+export const isDual = (u) => !!u && u.role === 'konselor' && u.rangkap_koordinator?.status === 'disetujui';
+export function setUser(u) {
+  state.realUser = u;
+  let mode = null; try { mode = localStorage.getItem('pj_mode'); } catch { /* */ }
+  state.mode = isDual(u) && mode === 'koordinator' ? 'koordinator' : null;
+  state.user = u && state.mode ? { ...u, role: 'koordinator', peran_asli: 'konselor' } : u;
 }
 export async function api(path, { method = 'GET', body, headers = {}, raw = false } = {}) {
   const go = () => fetch('/api' + path, {
     method, credentials: 'same-origin',
-    headers: { ...(body !== undefined && !(body instanceof Blob) ? { 'Content-Type': 'application/json' } : {}), ...(state.token ? { Authorization: 'Bearer ' + state.token } : {}), ...headers },
+    headers: { ...(body !== undefined && !(body instanceof Blob) ? { 'Content-Type': 'application/json' } : {}), ...(state.token ? { Authorization: 'Bearer ' + state.token } : {}), ...(state.mode === 'koordinator' ? { 'X-Peran': 'koordinator' } : {}), ...headers },
     body: body === undefined ? undefined : body instanceof Blob ? body : JSON.stringify(body),
   });
   let res = await go();

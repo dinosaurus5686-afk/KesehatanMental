@@ -1,10 +1,11 @@
 // Boot aplikasi: halaman publik (Home, masuk, daftar), kerangka tata letak per peran, router, notifikasi realtime.
-import { state, api, tryRefresh, esc, actions, openModal, closeModal, toast, ago, showError, loading } from './core.js';
+import { state, api, tryRefresh, esc, actions, openModal, closeModal, toast, ago, showError, loading, setUser, isDual } from './core.js';
 import { studentViews, studentNav } from './student.js';
 import { staffViews, staffNav } from './staff.js';
 import { publicViews } from './public.js';
 
 const ROLE_LABEL = { mahasiswa: 'Mahasiswa', konselor: 'Konselor', admin: 'Admin', koordinator: 'Koordinator BK' };
+const roleLabel = (u) => (u.peran_asli ? 'Koordinator BK · rangkap konselor' : isDual(u) ? 'Konselor · rangkap koordinator' : ROLE_LABEL[u.role]);
 export const HOME = { mahasiswa: '#/s/home', konselor: '#/c/dashboard', admin: '#/a/asesmen', koordinator: '#/k/dashboard' };
 const views = { ...studentViews, ...staffViews };
 const app = document.getElementById('app');
@@ -19,7 +20,8 @@ function shell() {
   app.innerHTML = `
   <div class="layout ${u.role === 'mahasiswa' ? 'is-student' : 'is-staff'}">
     <aside class="side">
-      <a class="brand" href="${HOME[u.role]}"><span class="brand-logo"><img src="${logo()}" alt="PAN-JALU"></span><span class="brand-text"><b>PAN-JALU</b><small>${ROLE_LABEL[u.role]}${u.universitas ? ` · ${esc(shortUni(u.universitas.nama))}` : ''}</small></span></a>
+      <a class="brand" href="${HOME[u.role]}"><span class="brand-logo"><img src="${logo()}" alt="PAN-JALU"></span><span class="brand-text"><b>PAN-JALU</b><small>${roleLabel(u)}${u.universitas ? ` · ${esc(shortUni(u.universitas.nama))}` : ''}</small></span></a>
+      ${isDual(state.realUser) ? `<div class="mode-switch" role="group" aria-label="Mode peran"><button class="${state.mode ? '' : 'on'}" data-act="switchMode" data-m="konselor">Konselor</button><button class="${state.mode ? 'on' : ''}" data-act="switchMode" data-m="koordinator">Koordinator BK</button></div>` : ''}
       <nav class="nav" aria-label="Menu utama">${nav.map((n) => `<a href="${n.href}" data-route="${[n.href, ...(n.alt || [])].join(' ')}"><span class="nav-ico" aria-hidden="true">${n.ico}</span>${esc(n.label)}</a>`).join('')}</nav>
       <div class="side-foot">
         <a href="#/" class="side-link">Lihat web Home</a>
@@ -54,11 +56,11 @@ actions.readAll = async () => { await api('/notifications/read-all', { method: '
 
 actions.logout = async () => {
   await api('/auth/logout', { method: 'POST' }).catch(() => {});
-  state.socket?.disconnect(); state.token = null; state.user = null; location.hash = '#/'; render();
+  state.socket?.disconnect(); state.token = null; setUser(null); location.hash = '#/'; render();
 };
 
 export async function afterLogin(r) {
-  if (r) { state.token = r.access_token; state.user = r.user; }
+  if (r) { state.token = r.access_token; setUser(r.user); }
   state.ref = state.ref || await api('/reference');
   // Data kampus pengguna (prodi, fakultas); state.pub.prodi dipakai filter & formulir yang sudah ada
   state.campus = await api('/campus').catch(() => null);
@@ -133,6 +135,14 @@ async function render() {
   }
 }
 actions.reload = () => render();
+// Pengalih mode untuk konselor yang merangkap Koordinator Layanan BK
+actions.switchMode = async (el) => {
+  if (el.dataset.m === 'koordinator' && !isDual(state.realUser)) await tryRefresh();
+  try { localStorage.setItem('pj_mode', el.dataset.m === 'koordinator' ? 'koordinator' : 'konselor'); } catch { /* */ }
+  setUser(state.realUser); shell();
+  toast(state.mode ? 'Mode Koordinator Layanan BK' : 'Mode Konselor', 'info');
+  const target = HOME[state.user.role]; if (location.hash === target) render(); else location.hash = target;
+};
 export const rerender = render;
 window.addEventListener('hashchange', render);
 
@@ -140,6 +150,6 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').cat
 
 (async function boot() {
   try { state.pub = await api('/public/config'); } catch (e) { showError(e); }
-  try { await tryRefresh(); await afterLogin(); } catch { state.user = null; }
+  try { await tryRefresh(); await afterLogin(); } catch { setUser(null); }
   render();
 })();

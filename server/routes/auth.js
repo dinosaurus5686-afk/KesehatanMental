@@ -5,7 +5,7 @@ const { get, run, all, insert, update, tx, audit, getConfig, nowIso } = require(
 const { verifyPassword, hashPassword, signJwt, sha256, randomToken, dec, enc } = require('../security');
 const { fail, authenticate, rateLimit, str } = require('../http');
 const { mails, validateEmail, mailMode } = require('../mailer');
-const { notify, activePeer } = require('../services');
+const { notify, activePeer, coordinators, coordinatorUsers } = require('../services');
 const { DEFAULT_HOME, DARURAT_FAQ } = require('../home');
 const campus = require('../campus');
 
@@ -36,6 +36,7 @@ function publicUser(u) {
     universitas: campus.universityView(uni),
     konselor: c ? { spesialisasi: c.spesialisasi, status_jaga: !!c.status_jaga, lingkup_fakultas: JSON.parse(c.lingkup_fakultas), lingkup_prodi: JSON.parse(c.lingkup_prodi || '[]'), layanan_terbuka: !!c.layanan_terbuka } : null,
     koordinator: k ? { jabatan: k.jabatan, unit: k.unit } : null,
+    rangkap_koordinator: u.role === 'konselor' ? (get("SELECT status, catatan, created_at, ditinjau_pada FROM coordinator_claims WHERE user_id = ? ORDER BY created_at DESC LIMIT 1", u.id) || null) : null,
   };
 }
 
@@ -172,7 +173,7 @@ function completeVerification(user) {
   if (rv) {
     mails.konselorMenunggu(user.email, user.nama, rv.peran, rv.peninjau).catch((e) => console.error('[email]', e.message));
     for (const [role, tautan, perKampus] of rv.pemeriksa) {
-      const list = all(`SELECT id, email FROM users WHERE role = ? AND status = 'aktif' ${perKampus ? 'AND university_id IS ?' : ''}`, ...(perKampus ? [role, user.university_id] : [role]));
+      const list = role === 'koordinator' && perKampus ? coordinatorUsers(user.university_id) : all(`SELECT id, email FROM users WHERE role = ? AND status = 'aktif' ${perKampus ? 'AND university_id IS ?' : ''}`, ...(perKampus ? [role, user.university_id] : [role]));
       for (const a of list) {
         notify(a.id, { tipe: 'pendaftar', judul: `Pendaftar ${rv.peran} baru`, isi: `${user.nama} menunggu persetujuan.`, tautan });
         mails.pendaftarBaru(a.email, user.nama, rv.peran, tautan).catch((e) => console.error('[email]', e.message));
@@ -246,7 +247,7 @@ r.get('/public/universities/:id', (req, res) => {
   const u = get('SELECT * FROM universities WHERE id = ?', str(req.params.id, 12));
   if (!u) fail(404, 'Perguruan tinggi tidak ditemukan.');
   res.json({ ...campus.universityView(u), prodi: campus.campusProdi(u.id), fakultas: campus.campusFaculties(u.id),
-    konselor: campus.campusCounselors(u.id, str(req.query.prodi, 40) || null), koordinator_aktif: !!get("SELECT 1 AS x FROM users WHERE role = 'koordinator' AND status = 'aktif' AND university_id = ?", u.id) });
+    konselor: campus.campusCounselors(u.id, str(req.query.prodi, 40) || null), koordinator_aktif: coordinators(u.id).length > 0 });
 });
 
 r.get('/public/home', (_req, res) => {

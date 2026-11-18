@@ -23,12 +23,37 @@ const catLabel = (k) => state.ref.content_categories.find((c) => c.kode === k)?.
 const segeraChip = (x) => (x ? '<span class="chip crit">Butuh bantuan segera</span>' : '');
 
 // ================= Dashboard konselor =================
+// Kartu klaim rangkap Koordinator Layanan BK (kampus belum memiliki koordinator; wajib disetujui admin)
+function claimCard(cl) {
+  if (!cl) return '';
+  const c = cl.klaim;
+  if (c?.status === 'disetujui') return `<section class="card claim-card ok"><div class="claim-ico" aria-hidden="true">🏛️</div><div><h3>Anda merangkap Koordinator Layanan BK</h3><p class="small">Disetujui admin ${c.ditinjau_pada ? fmtDate(c.ditinjau_pada) : ''}. Gunakan pengalih <b>Konselor | Koordinator BK</b> di menu samping untuk membuka menu koordinator (verifikasi konselor, jadwal, fakultas & prodi, kasus darurat, laporan kampus).</p>
+    <div class="row wrap"><button class="btn primary sm" data-act="switchMode" data-m="koordinator">Buka mode Koordinator</button><button class="btn ghost sm" data-act="claimCancel" data-k="lepas">Lepas peran koordinator</button></div></div></section>`;
+  if (c?.status === 'menunggu') return `<section class="card claim-card warn"><div class="claim-ico" aria-hidden="true">⏳</div><div><h3>Pengajuan Koordinator Layanan BK menunggu persetujuan admin</h3><p class="small">Diajukan ${fmtDT(c.diajukan_pada)}. Alasan: “${esc(c.alasan || '')}”. Anda akan menerima notifikasi dan email setelah admin memutuskan.</p>
+    <button class="btn ghost sm" data-act="claimCancel" data-k="batal">Batalkan pengajuan</button></div></section>`;
+  if (!cl.bisa_mengajukan) return '';
+  const prev = c && ['ditolak', 'dicabut'].includes(c.status) ? `<div class="notice warn small">Pengajuan sebelumnya ${c.status === 'ditolak' ? 'ditolak' : 'dicabut'} admin${c.catatan ? `: “${esc(c.catatan)}”` : '.'} Anda dapat mengajukan kembali.</div>` : '';
+  return `<section class="card claim-card"><div class="claim-ico" aria-hidden="true">🏛️</div><div><h3>Kampus Anda belum memiliki Koordinator Layanan BK</h3>
+    <p class="small">Anda dapat mengajukan diri untuk <b>merangkap</b> sebagai Koordinator Layanan BK ${esc(cl.kampus || '')} tanpa kehilangan peran konselor. Pengajuan <b>wajib disetujui admin</b>. Koordinator memverifikasi konselor baru, mengatur jadwal layanan, mengelola fakultas & prodi, memastikan kasus darurat tertangani, dan membaca laporan komunal kampus (data agregat tanpa identitas mahasiswa).</p>${prev}
+    <form data-form="claimSubmit" class="stack"><label>Alasan pengajuan<textarea name="alasan" rows="2" required minlength="10" maxlength="1000" placeholder="Contoh: saya ketua unit layanan konseling dan bersedia mengoordinasikan layanan BK kampus."></textarea></label>
+    <div class="row end"><button class="btn primary" type="submit">Ajukan ke admin</button></div></form></div></section>`;
+}
+forms.claimSubmit = async (d) => { await api('/coord-claim', { method: 'POST', body: d }); toast('Pengajuan dikirim ke admin. Anda akan diberi tahu setelah diputuskan.'); rerender(); };
+actions.claimCancel = async (el) => {
+  const lepas = el.dataset.k === 'lepas';
+  if (!(await confirmBox(lepas ? 'Lepas peran Koordinator Layanan BK? Menu koordinator tidak lagi tersedia untuk akun Anda; kampus dapat mengajukan koordinator baru.' : 'Batalkan pengajuan Koordinator Layanan BK?', { ok: lepas ? 'Lepas peran' : 'Batalkan pengajuan' }))) return;
+  await api('/coord-claim/me', { method: 'DELETE' });
+  if (lepas) { try { localStorage.setItem('pj_mode', 'konselor'); } catch { /* */ } location.reload(); return; }
+  toast('Pengajuan dibatalkan.'); rerender();
+};
+
 async function dashboard() {
-  const [d, me] = await Promise.all([api('/dashboard/counselor'), api('/counselor-profile/me')]);
+  const [d, me, cl] = await Promise.all([api('/dashboard/counselor'), api('/counselor-profile/me'), api('/coord-claim/me').catch(() => null)]);
   const k = d.kpi;
   const kpi = (label, val, tone, href) => `<a class="kpi ${tone}" href="${href}"><span>${label}</span><b>${val}</b></a>`;
   return `<div class="row between wrap"><div><span class="eyebrow">Lingkup kewenangan: ${d.lingkup.join(', ') || 'klien sendiri'}</span><h1>Halo, ${esc(state.user.nama)}</h1></div>
     <label class="switch"><input type="checkbox" data-change="dutyToggle" ${me.status_jaga ? 'checked' : ''}><span></span>Status jaga ${me.status_jaga ? 'aktif' : 'nonaktif'}</label></div>
+  ${claimCard(cl)}
   <div class="kpis">${kpi('Butuh bantuan segera', k.risiko_tinggi_aktif, k.risiko_tinggi_aktif ? 'crit' : 'ok', '#/c/dashboard')}${kpi('Reservasi baru', k.reservasi_baru, k.reservasi_baru ? 'warn' : '', '#/c/meja')}${kpi('Entri jurnal (7 hari)', k.entri_jurnal_7hari, '', '#/c/mahasiswa')}${kpi('Workbook aktif (30 hari)', k.workbook_aktif, '', '#/c/mahasiswa')}</div>
   ${d.alerts.length ? `<section class="card alert-panel"><h3>Konseli yang menyatakan butuh bantuan segera</h3><p class="small">SLA institusi: ${d.sla_menit} menit. Hubungi mahasiswa, pastikan keamanannya, lalu tandai ditindaklanjuti dengan catatan tindakan.</p>
     ${d.alerts.map((a) => { const mins = Math.round((Date.now() - new Date(a.dibuat)) / 60000); const over = mins > d.sla_menit; return `<div class="alert-row ${over ? 'over' : ''}"><div><b>${studentLink(a.student_id, a.nama)}</b>${a.ditugaskan ? ` <span class="chip ${a.ditugaskan.saya ? 'crit' : ''}">Ditugaskan koordinator ke ${a.ditugaskan.saya ? 'Anda' : esc(a.ditugaskan.nama)}</span>` : ''}<span class="small">Terdeteksi ${ago(a.dibuat)} dari ${esc(a.sumber)} ${over ? `· <b>melewati SLA${a.dieskalasi ? ', sudah dieskalasi ke penanggung jawab layanan' : ''}</b>` : `· sisa ${d.sla_menit - mins} menit`}</span></div>
@@ -759,8 +784,25 @@ actions.homeReset = async () => { if (!(await confirmBox('Kembalikan seluruh isi
 
 // ================= Admin: pendaftar Koordinator Layanan BK =================
 let coordFilter = 'menunggu_persetujuan';
+let coordTab = 'akun'; let claimFilter = 'menunggu';
+const CLAIM_ST = { menunggu: ['Menunggu persetujuan', 'warn'], disetujui: ['Disetujui · merangkap', 'ok'], ditolak: ['Ditolak', 'crit'], dibatalkan: ['Dibatalkan konselor', ''], dilepas: ['Dilepas konselor', ''], dicabut: ['Dicabut admin', ''] };
 async function coordRegistrants() {
-  const d = await api('/admin/coordinators');
+  const [d, cl] = await Promise.all([api('/admin/coordinators'), api(`/admin/coord-claims${claimFilter !== 'semua' ? `?status=${claimFilter}` : ''}`)]);
+  const nWait = cl.jumlah.menunggu || 0;
+  const tabs = `<div class="tabs">${[['akun', 'Pendaftar akun koordinator'], ['klaim', `Klaim konselor (rangkap)${nWait ? ` · ${nWait} menunggu` : ''}`]].map(([k, l]) => `<a href="#" class="${coordTab === k ? 'on' : ''}" data-act="coordTab" data-k="${k}">${l}</a>`).join('')}</div>`;
+  if (coordTab === 'klaim') {
+    const card = (c) => `<section class="card reg-card"><div class="row between wrap"><div><b>${esc(c.nama)}</b> <span class="chip ${CLAIM_ST[c.status][1]}">${CLAIM_ST[c.status][0]}</span><p class="small muted">${esc(c.email)} · <span class="mono">${esc(c.nip || '')}</span></p></div><small class="muted">Diajukan ${fmtDT(c.diajukan_pada)}</small></div>
+      <dl class="kv"><dt>Perguruan tinggi</dt><dd>${esc(c.universitas || '—')}</dd><dt>Spesialisasi</dt><dd>${esc(c.spesialisasi || '—')}</dd><dt>Alasan</dt><dd>${esc(c.alasan || '—')}</dd>
+      ${c.koordinator_lain?.length ? `<dt>Perhatian</dt><dd><span class="chip warn">Kampus kini sudah punya koordinator: ${esc(c.koordinator_lain.join(', '))}</span></dd>` : ''}
+      ${c.peninjau ? `<dt>Ditinjau</dt><dd>${esc(c.peninjau)} · ${c.ditinjau_pada ? fmtDT(c.ditinjau_pada) : ''}</dd>` : ''}${c.catatan ? `<dt>Catatan</dt><dd>${esc(c.catatan)}</dd>` : ''}</dl>
+      <div class="row wrap end">${c.status === 'menunggu' ? `<button class="btn primary sm" data-act="claimApprove" data-id="${c.id}">Setujui</button><button class="btn ghost sm" data-act="claimDecide" data-id="${c.id}" data-k="reject">Tolak</button>` : ''}
+      ${c.status === 'disetujui' ? `<button class="btn ghost sm" data-act="claimDecide" data-id="${c.id}" data-k="revoke">Cabut peran rangkap</button>` : ''}</div></section>`;
+    return `<h1>Pendaftar Koordinator Layanan BK</h1>${tabs}
+    <p class="muted">Konselor aktif dapat mengajukan diri merangkap Koordinator Layanan BK bila kampusnya belum memiliki koordinator. Setelah disetujui, konselor memakai satu akun dengan pengalih <b>Konselor | Koordinator BK</b>. Admin dapat mencabut peran rangkap kapan saja.</p>
+    <div class="kpis"><div class="kpi ${nWait ? 'warn' : ''}"><span>Menunggu persetujuan</span><b>${nWait}</b></div><div class="kpi ok"><span>Konselor merangkap koordinator</span><b>${cl.jumlah.disetujui || 0}</b></div></div>
+    <div class="chips">${[['menunggu', 'Menunggu'], ['disetujui', 'Disetujui'], ['ditolak', 'Ditolak'], ['dicabut', 'Dicabut'], ['semua', 'Semua']].map(([k, l]) => `<button class="chip-btn ${claimFilter === k ? 'on' : ''}" data-act="claimFilter" data-k="${k}">${l}</button>`).join('')}</div>
+    ${cl.items.map(card).join('') || empty('Tidak ada data', claimFilter === 'menunggu' ? 'Belum ada pengajuan konselor yang menunggu persetujuan.' : '')}`;
+  }
   const count = (s) => d.items.filter((x) => x.status === s).length;
   const list = d.items.filter((x) => coordFilter === 'semua' || x.status === coordFilter);
   const card = (c) => `<section class="card reg-card"><div class="row between wrap"><div><b>${esc(c.nama)}</b> <span class="chip ${ST[c.status][1]}">${ST[c.status][0]}</span><p class="small muted">${esc(c.email)} · <span class="mono">${esc(c.nim_nip)}</span>${c.telepon ? ` · ${esc(c.telepon)}` : ''}</p></div><small class="muted">Daftar ${fmtDT(c.created_at)}</small></div>
@@ -773,13 +815,18 @@ async function coordRegistrants() {
       ${c.status === 'aktif' ? `<button class="btn ghost sm" data-act="coordActive" data-id="${c.id}" data-a="0">Nonaktifkan</button>` : ''}
       ${c.status === 'nonaktif' ? `<button class="btn ghost sm" data-act="coordActive" data-id="${c.id}" data-a="1">Aktifkan kembali</button>` : ''}
     </div></section>`;
-  return `<h1>Pendaftar Koordinator Layanan BK</h1>
+  return `<h1>Pendaftar Koordinator Layanan BK</h1>${tabs}
   <p class="muted">Koordinator dapat memverifikasi & mengelola konselor, mengatur jadwal layanan konselor, memantau kasus darurat tanpa identitas mahasiswa, dan melihat laporan komunal agregat.</p>
   <div class="kpis"><div class="kpi ${count('menunggu_persetujuan') ? 'warn' : ''}"><span>Menunggu persetujuan</span><b>${count('menunggu_persetujuan')}</b></div><div class="kpi ok"><span>Koordinator aktif</span><b>${count('aktif')}</b></div></div>
   <div class="chips">${[['menunggu_persetujuan', 'Menunggu'], ['aktif', 'Aktif'], ['menunggu_verifikasi', 'Belum verifikasi'], ['ditolak', 'Ditolak'], ['nonaktif', 'Nonaktif'], ['semua', 'Semua']].map(([k, l]) => `<button class="chip-btn ${coordFilter === k ? 'on' : ''}" data-act="coordFilter" data-k="${k}">${l} (${k === 'semua' ? d.items.length : count(k)})</button>`).join('')}</div>
   ${list.map(card).join('') || empty('Tidak ada data', coordFilter === 'menunggu_persetujuan' ? 'Belum ada pendaftar koordinator yang menunggu persetujuan.' : '')}`;
 }
 actions.coordFilter = (el) => { coordFilter = el.dataset.k; rerender(); };
+actions.coordTab = (el) => { coordTab = el.dataset.k; rerender(); };
+actions.claimFilter = (el) => { claimFilter = el.dataset.k; rerender(); };
+actions.claimApprove = async (el) => { if (!(await confirmBox('Setujui konselor ini merangkap Koordinator Layanan BK di kampusnya? Ia akan menerima notifikasi dan email.', { ok: 'Setujui', tone: 'primary' }))) return; await api(`/admin/coord-claims/${el.dataset.id}/approve`, { method: 'POST', body: {} }); toast('Pengajuan disetujui.'); rerender(); };
+actions.claimDecide = (el) => openModal(`<h3>${el.dataset.k === 'reject' ? 'Tolak pengajuan koordinator' : 'Cabut peran rangkap koordinator'}</h3><form data-form="claimDecide" data-id="${el.dataset.id}" data-k="${el.dataset.k}" class="stack"><label>Alasan (dikirim ke konselor)<textarea name="catatan" rows="3" required minlength="5" maxlength="500"></textarea></label><div class="row end"><button class="btn ${el.dataset.k === 'reject' ? 'crit' : 'primary'}" type="submit">${el.dataset.k === 'reject' ? 'Tolak' : 'Cabut'}</button></div></form>`);
+forms.claimDecide = async (d, f) => { await api(`/admin/coord-claims/${f.dataset.id}/${f.dataset.k}`, { method: 'POST', body: d }); closeModal(); toast(f.dataset.k === 'reject' ? 'Pengajuan ditolak.' : 'Peran rangkap dicabut.'); rerender(); };
 actions.coordApprove = async (el) => { if (!(await confirmBox('Setujui akun Koordinator Layanan BK ini? Pendaftar akan menerima email pemberitahuan.', { ok: 'Setujui' }))) return; await api(`/admin/coordinators/${el.dataset.id}/approve`, { method: 'POST' }); toast('Koordinator disetujui; email pemberitahuan dikirim.'); rerender(); };
 actions.coordReject = (el) => openModal(`<h3>Tolak pendaftaran koordinator</h3><form data-form="coordReject" data-id="${el.dataset.id}" class="stack"><label>Alasan (dikirim ke email pendaftar)<textarea id="cr_reason" name="alasan" rows="3" required minlength="5"></textarea></label><div class="row end"><button class="btn crit" type="submit">Tolak pendaftaran</button></div></form>`);
 forms.coordReject = async (d, f) => { await api(`/admin/coordinators/${f.dataset.id}/reject`, { method: 'POST', body: d }); closeModal(); toast('Pendaftaran ditolak; email pemberitahuan dikirim.'); rerender(); };

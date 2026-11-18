@@ -120,7 +120,11 @@ function effectiveSchedule(studentId) {
 const counselorsOnDuty = (uni) => all("SELECT u.id FROM counselors c JOIN users u ON u.id = c.user_id WHERE c.status_jaga = 1 AND u.status = 'aktif' AND u.university_id IS ?", uni).map((r) => r.id);
 const allCounselors = (uni) => all("SELECT id FROM users WHERE role = 'konselor' AND status = 'aktif' AND university_id IS ?", uni).map((r) => r.id);
 const admins = () => all("SELECT id FROM users WHERE role = 'admin' AND status = 'aktif'").map((r) => r.id);
-const coordinators = (uni) => all("SELECT id FROM users WHERE role = 'koordinator' AND status = 'aktif' AND university_id IS ?", uni).map((r) => r.id);
+// Koordinator Layanan BK kampus: akun koordinator, ditambah konselor yang klaim rangkap koordinatornya disetujui admin
+const COORD_WHERE = "status = 'aktif' AND university_id IS ? AND (role = 'koordinator' OR (role = 'konselor' AND id IN (SELECT user_id FROM coordinator_claims WHERE status = 'disetujui')))";
+const coordinatorUsers = (uni) => all(`SELECT id, email, nama, role FROM users WHERE ${COORD_WHERE}`, uni);
+const coordinators = (uni) => coordinatorUsers(uni).map((r) => r.id);
+const dualCoordinator = (userId) => !!get("SELECT 1 AS x FROM coordinator_claims WHERE user_id = ? AND status = 'disetujui'", userId);
 const universityOf = (userId) => get('SELECT university_id FROM users WHERE id = ?', userId)?.university_id ?? null;
 // Kode kasus anonim untuk Koordinator (tanpa nama/NIM): turunan tetap dari id peringatan
 const caseCode = (alertId) => `KD-${alertId.replace(/-/g, '').slice(0, 6).toUpperCase()}`;
@@ -218,5 +222,5 @@ const dimLabel = (kode) => DIMENSIONS.find((d) => d.kode === kode)?.label || kod
 module.exports = {
   setIo, emit, notify, markOnline, isOnline, storeAssessment, contentRecommendations, serviceRecommendations, recommendationsFor, decodeAnswers,
   handleRisk, counselorScope, canAccessStudent, scopedStudentIds, assessmentDetail, latestAssessment, effectiveSchedule, displayName,
-  runScheduler, counselorsOnDuty, allCounselors, activePeer, dimLabel, QUADRANTS, coordinators, caseCode, facultyOf, universityOf, visibleContent,
+  runScheduler, counselorsOnDuty, allCounselors, activePeer, dimLabel, QUADRANTS, coordinators, coordinatorUsers, dualCoordinator, admins, caseCode, facultyOf, universityOf, visibleContent,
 };

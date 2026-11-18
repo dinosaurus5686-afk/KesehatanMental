@@ -89,6 +89,11 @@ CREATE TABLE IF NOT EXISTS content_adoptions (${T}, content_id TEXT NOT NULL REF
   university_id TEXT, status TEXT NOT NULL DEFAULT 'published' CHECK (status IN ('published','nonaktif')), ulasan TEXT, rating INTEGER, UNIQUE(content_id, counselor_id));
 CREATE TABLE IF NOT EXISTS content_needs (${T}, kunci TEXT UNIQUE NOT NULL, selesai INTEGER NOT NULL DEFAULT 0, content_id TEXT REFERENCES content_items(id) ON DELETE SET NULL, catatan TEXT, ditandai_oleh TEXT, ditandai_pada TEXT);
 CREATE TABLE IF NOT EXISTS coordinators (${T}, user_id TEXT UNIQUE NOT NULL REFERENCES users(id), jabatan TEXT, unit TEXT);
+CREATE TABLE IF NOT EXISTS coordinator_claims (${T}, user_id TEXT NOT NULL REFERENCES users(id), university_id TEXT, alasan TEXT,
+  status TEXT NOT NULL DEFAULT 'menunggu' CHECK (status IN ('menunggu','disetujui','ditolak','dibatalkan','dilepas','dicabut')),
+  ditinjau_oleh TEXT REFERENCES users(id), ditinjau_pada TEXT, catatan TEXT);
+CREATE INDEX IF NOT EXISTS ix_cclaim_user ON coordinator_claims(user_id, status);
+CREATE INDEX IF NOT EXISTS ix_cclaim_uni ON coordinator_claims(university_id, status);
 CREATE TABLE IF NOT EXISTS counselor_slots (${T}, counselor_id TEXT NOT NULL REFERENCES users(id), hari INTEGER NOT NULL CHECK (hari BETWEEN 1 AND 7), jam_mulai TEXT NOT NULL, jam_selesai TEXT NOT NULL,
   jenis_layanan TEXT NOT NULL, mode TEXT NOT NULL CHECK (mode IN ('online','offline','keduanya')), kuota INTEGER NOT NULL DEFAULT 1, lokasi TEXT, aktif INTEGER NOT NULL DEFAULT 1);
 CREATE TABLE IF NOT EXISTS counselor_consents (${T}, counselor_id TEXT UNIQUE NOT NULL REFERENCES users(id), versi INTEGER NOT NULL DEFAULT 1,

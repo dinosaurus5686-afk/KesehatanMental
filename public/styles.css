@@ -1034,3 +1034,13 @@ form[data-form="psiQual"] label { display: grid; gap: .2rem; margin: .4rem 0; fo
 .pop-col ol { margin: 0; padding-left: 1.2rem; display: grid; gap: .35rem; } .pop-col li small { display: block; }
 .eng-grid h4 { margin: .6rem 0 .3rem; font-size: .9rem; }
 .breathe-card small { display: block; font-size: .76rem; line-height: 1.35; margin-top: .2rem; } .breathe-card .breath-src { color: var(--accent); font-style: italic; margin-top: .3rem; }
+
+/* Klaim rangkap Koordinator Layanan BK */
+.claim-card { display: grid; grid-template-columns: 3rem 1fr; gap: .9rem; align-items: start; border-left: 4px solid var(--accent); }
+.claim-card.ok { border-left-color: var(--ok); } .claim-card.warn { border-left-color: var(--warn); }
+.claim-card .claim-ico { font-size: 1.8rem; width: 3rem; height: 3rem; border-radius: 50%; display: grid; place-items: center; background: var(--accent-soft, #e8edfb); }
+.claim-card h3 { margin: 0 0 .3rem; } .claim-card textarea { width: 100%; }
+@media (max-width: 560px) { .claim-card { grid-template-columns: 1fr; } }
+.mode-switch { display: grid; grid-template-columns: 1fr 1fr; gap: 3px; margin: .2rem .9rem .8rem; padding: 3px; border-radius: 12px; background: rgba(255,255,255,.14); }
+.mode-switch button { border: 0; border-radius: 9px; padding: .45rem .3rem; font: 700 .76rem var(--font); color: rgba(255,255,255,.85); background: transparent; cursor: pointer; }
+.mode-switch button.on { background: #fff; color: var(--accent); box-shadow: 0 2px 6px rgba(0,0,0,.12); }
