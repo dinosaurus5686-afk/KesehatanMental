@@ -250,7 +250,8 @@ const formOf = (a) => ({ ...JSON.parse(dec(a.formulir_json)), status: { pending:
 r.get('/appointments/:id/form', (req, res) => { const a = ownAppt(req, ['konselor', 'mahasiswa']); if (!a.formulir_json) fail(404, 'Formulir tidak tersedia.'); res.json(formOf(a)); });
 r.get('/appointments/:id/form/pdf', (req, res) => {
   const a = ownAppt(req, ['konselor', 'mahasiswa']); if (!a.formulir_json) fail(404, 'Formulir tidak tersedia.');
-  pdf.registrationForm(res, { form: formOf(a) });
+  const st = get('SELECT u.university_id, v.nama AS kampus FROM users u LEFT JOIN universities v ON v.id = u.university_id WHERE u.id = ?', a.student_id);
+  pdf.registrationForm(res, { form: formOf(a), brand: require('../branding').brandFor(st?.university_id), kampus: st?.kampus });
 });
 
 // Detail riwayat untuk konseli: formulir, jadwal, ringkasan yang disetujui konselor, tindak lanjut, penilaian

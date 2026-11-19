@@ -415,12 +415,44 @@ function slotForm(s = {}, id = '', form = 'slotSave') {
     <div class="row end full"><button class="btn primary" type="submit">${id ? 'Simpan perubahan' : 'Tambah slot'}</button></div></form>`;
 }
 let SLOTS = [];
+// ---- Pendaftaran mahasiswa kolektif (unggah Excel) ----
+let IMP = null; // { file, hasil }
+function importCard(inv, me) {
+  if (!me.universitas || me.universitas.startsWith('PAN-JALU (')) return '';
+  const r = IMP?.hasil; const st = { siap: ['Siap', 'ok'], galat: ['Perlu diperbaiki', 'crit'], terdaftar: ['Sudah terdaftar', ''] };
+  return `<section class="card stack imp-card"><div class="row between wrap"><h3>Daftarkan mahasiswa secara kolektif</h3><span class="chip">${inv.jumlah} didaftarkan · ${inv.aktif} aktif</span></div>
+    <p class="small muted">Daftarkan banyak mahasiswa sekaligus dengan berkas Excel. Setiap mahasiswa menerima email aktivasi untuk membuat kata sandi dan menyetujui kebijakan privasi; Anda otomatis menjadi konselor pendampingnya.</p>
+    <ol class="imp-steps"><li><b>Unduh templat</b> <button type="button" class="btn ghost sm" data-act="impTemplate">⬇ Templat Excel</button><small>Kolom: NIM*, Nama lengkap*, Email aktif*, Program studi, Angkatan*, Kelas, Jenis kelamin (L/P), No. telepon.</small></li>
+      <li><b>Isi data mahasiswa</b><small>Maksimal 500 baris per berkas. Nama prodi mengikuti lembar "Daftar Prodi".</small></li>
+      <li><b>Unggah & periksa</b> <label class="btn ghost sm file-btn">📄 Pilih berkas .xlsx<input type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" data-change="impFile" hidden></label><small>Hasil pemeriksaan tampil sebelum ada data yang disimpan.</small></li></ol>
+    ${r ? `<div class="imp-sum"><span class="chip">${r.ringkas.total} baris</span><span class="chip ok">${r.ringkas.siap} siap</span>${r.ringkas.galat ? `<span class="chip crit">${r.ringkas.galat} perlu diperbaiki</span>` : ''}${r.ringkas.terdaftar ? `<span class="chip">${r.ringkas.terdaftar} sudah terdaftar</span>` : ''}</div>
+      <div class="table-wrap imp-table"><table class="table"><thead><tr><th>Baris</th><th>NIM</th><th>Nama</th><th>Email</th><th>Prodi</th><th>Angkatan</th><th>Status</th><th>Keterangan</th></tr></thead><tbody>${r.baris.map((x) => `<tr class="${x.status === 'galat' ? 'imp-err' : x.status === 'terdaftar' ? 'faded' : ''}"><td class="mono">${x.baris}</td><td class="mono">${esc(x.nim)}</td><td>${esc(x.nama)}</td><td class="small">${esc(x.email)}</td><td class="small">${esc(x.prodi || '—')}</td><td>${esc(String(x.angkatan || ''))}</td><td><span class="chip ${st[x.status][1]}">${st[x.status][0]}</span></td><td class="small">${esc(x.keterangan || '')}</td></tr>`).join('')}</tbody></table></div>
+      <div class="row end wrap"><button type="button" class="btn ghost" data-act="impReset">Batal</button><button type="button" class="btn primary" data-act="impCommit" ${r.ringkas.siap ? '' : 'disabled'}>Daftarkan ${r.ringkas.siap} mahasiswa & kirim email aktivasi</button></div>` : ''}
+    ${inv.items.length ? `<details ${inv.items.some((x) => !x.aktif) ? '' : ''}><summary class="small"><b>Mahasiswa yang Anda daftarkan</b> (${inv.items.filter((x) => !x.aktif).length} belum aktif)</summary><div class="table-wrap"><table class="table"><thead><tr><th>Nama</th><th>NIM</th><th>Email</th><th>Status</th><th></th></tr></thead><tbody>${inv.items.map((x) => `<tr><td>${esc(x.nama)}</td><td class="mono">${esc(x.nim)}</td><td class="small">${esc(x.email)}</td><td>${x.aktif ? `<span class="chip ok">Aktif ${fmtDate(x.aktif_pada)}</span>` : `<span class="chip warn">Menunggu aktivasi</span><br><small class="muted">email ${x.jumlah_kirim}× · ${x.terkirim_pada ? fmtDT(x.terkirim_pada) : '—'}</small>`}</td><td>${x.aktif ? '' : `<button class="btn ghost sm" data-act="impResend" data-id="${x.id}">Kirim ulang</button>`}</td></tr>`).join('')}</tbody></table></div></details>` : ''}</section>`;
+}
+actions.impTemplate = () => download('/counselor/import/template', 'templat-daftar-mahasiswa-pan-jalu.xlsx');
+changeHandlers.impFile = (el) => {
+  const f = el.files?.[0]; el.value = ''; if (!f) return;
+  if (f.size > 700 * 1024) return toast('Berkas terlalu besar (maks. 700 KB). Bagi menjadi beberapa berkas.', 'warn');
+  const rd = new FileReader();
+  rd.onload = async () => { const file = String(rd.result).split(',')[1]; try { const hasil = await api('/counselor/import', { method: 'POST', body: { file } }); IMP = { file, hasil }; rerender(); } catch (e) { toast(e.message, 'warn'); } };
+  rd.readAsDataURL(f);
+};
+actions.impReset = () => { IMP = null; rerender(); };
+actions.impCommit = async (el) => {
+  if (!(await confirmBox(`Daftarkan ${IMP.hasil.ringkas.siap} mahasiswa dan kirim email aktivasi kepada mereka?`, { ok: 'Daftarkan', tone: 'primary' }))) return;
+  el.disabled = true;
+  try { const r = await api('/counselor/import', { method: 'POST', body: { file: IMP.file, simpan: true } }); IMP = null; toast(`${r.ringkas.didaftarkan} mahasiswa didaftarkan; ${r.ringkas.email_terkirim} email aktivasi terkirim.`); rerender(); } catch (e) { el.disabled = false; throw e; }
+};
+actions.impResend = async (el) => { el.disabled = true; await api(`/counselor/invites/${el.dataset.id}/resend`, { method: 'POST', body: {} }); toast('Email aktivasi dikirim ulang.'); el.textContent = 'Terkirim'; };
+
 async function counselSettings() {
-  const [sl, c, me] = await Promise.all([api('/counselor-slots/me'), api('/counselor-consent/me'), api('/counselor-profile/me')]);
+  const [sl, c, me, inv] = await Promise.all([api('/counselor-slots/me'), api('/counselor-consent/me'), api('/counselor-profile/me'), api('/counselor/invites')]);
   SVC = sl.layanan; SLOTS = sl.slots;
   const active = sl.slots.filter((s) => s.aktif);
   const byFak = me.fakultas_kampus.map((f) => ({ ...f, prodi: me.prodi_kampus.filter((p) => p.fakultas_kode === f.kode) }));
   return `${counselHub('#/c/pengaturan')}
+  ${importCard(inv, me)}
   <form data-form="contextSave" class="card stack"><div class="row between wrap"><h3>Konteks kerja & layanan</h3><span class="chip">${esc(me.universitas || '')}</span></div>
     <p class="small muted">Konteks kerja tampil kepada mahasiswa saat mendaftar dan memilih konselor. Data di Dashboard, Asesmen, Profil Mahasiswa, Laporan Komunal, dan Evaluasi hanya memuat <b>mahasiswa binaan Anda</b> (yang memilih Anda; saat ini ${me.binaan} mahasiswa) serta mahasiswa yang belum memilih konselor dan berada dalam konteks kerja ini.</p>
     ${byFak.length ? `<div class="ctx-grid">${byFak.map((f) => `<fieldset class="ctx-fak"><legend><label class="check"><input type="checkbox" name="fak_${esc(f.kode)}" value="1" ${me.lingkup_fakultas.includes(f.kode) ? 'checked' : ''}> <b>${esc(f.nama)}</b> <small class="muted">(seluruh prodi)</small></label></legend>
@@ -1017,13 +1049,46 @@ forms.needFilter = (d) => { NEEDU = d.universitas || ''; rerender(); };
 changeHandlers.needDone = async (el) => { await api(`/admin/content-needs/${encodeURIComponent(el.dataset.k)}`, { method: 'PUT', body: { selesai: el.checked } }); toast(el.checked ? 'Kebutuhan ditandai selesai.' : 'Tanda selesai dibatalkan.'); rerender(); };
 
 // ---- Koordinator: fakultas & program studi kampus ----
+// ---- Kop dokumen kampus (logo, nama PT, unit layanan BK, alamat) ----
+let KOP = null; let kopLogo = null;
+const kopPreview = (k) => `<div class="kop-prev"><div class="kop-logo">${k.logo ? `<img src="${k.logo}" alt="Logo">` : '<img src="/logo.png" alt="Logo PAN-JALU">'}</div><div><b>${esc((k.nama || '').toUpperCase())}</b><span>${esc(k.unit || 'Nama unit layanan BK')}</span><small>PAN-JALU — Psikoedukasi, Asesmen, dan Navigasi Menuju Jiwa Luhur</small>${k.alamat ? `<small>${esc(k.alamat)}</small>` : ''}${[k.telepon && `Telp. ${k.telepon}`, k.email, k.situs].filter(Boolean).length ? `<small>${esc([k.telepon && `Telp. ${k.telepon}`, k.email, k.situs].filter(Boolean).join(' · '))}</small>` : ''}</div></div>`;
+function kopCard(k) {
+  KOP = k; kopLogo = null;
+  return `<section class="card kop-card"><div class="row between wrap"><h3>Kop dokumen kampus</h3>${k.diatur ? `<span class="chip ok">Kop kampus aktif</span>` : '<span class="chip">Memakai kop PAN-JALU</span>'}</div>
+    <p class="small muted">Logo, nama perguruan tinggi, nama unit layanan BK, dan alamat ini tampil di <b>semua dokumen PDF/Word</b> koordinator, konselor, dan mahasiswa kampus Anda (laporan asesmen, catatan perkembangan, formulir konseling, bukti persetujuan, laporan komunal, raport konselor). Bila belum diatur, dokumen memakai kop PAN-JALU dan nama kampus tampil di bagian identitas mahasiswa.</p>
+    <div class="kop-grid"><form data-form="kopSave" class="form-grid inner" data-change-form="kop">
+      <label class="full">Logo kampus (PNG/JPG, maks. 600 KB)<input type="file" accept="image/png,image/jpeg" data-change="kopLogo"></label>
+      <label class="full">Nama perguruan tinggi<input name="nama" value="${esc(k.nama)}" required minlength="5" maxlength="160" data-input="kopLive"></label>
+      <label class="full">Nama unit layanan BK<input name="unit" value="${esc(k.unit)}" required minlength="3" maxlength="160" placeholder="mis. UPT Layanan Bimbingan dan Konseling" data-input="kopLive"></label>
+      <label class="full">Alamat<input name="alamat" value="${esc(k.alamat)}" maxlength="300" placeholder="Jalan, kota, provinsi, kode pos" data-input="kopLive"></label>
+      <label>Telepon<input name="telepon" value="${esc(k.telepon)}" maxlength="40" data-input="kopLive"></label>
+      <label>Email<input name="email" type="email" value="${esc(k.email)}" maxlength="120" data-input="kopLive"></label>
+      <label class="full">Situs web (opsional)<input name="situs" value="${esc(k.situs)}" maxlength="120" data-input="kopLive"></label>
+      <div class="row end wrap full">${k.diatur ? '<button type="button" class="btn ghost" data-act="kopReset">Pakai kop PAN-JALU</button>' : ''}${k.logo ? '<button type="button" class="btn ghost" data-act="kopNoLogo">Hapus logo</button>' : ''}<button type="button" class="btn ghost" data-act="kopSample">Unduh contoh PDF</button><button class="btn primary" type="submit">Simpan kop</button></div></form>
+      <div><small class="muted">Pratinjau kop</small><div id="kopPrev">${kopPreview(k)}</div>${k.diubah_pada ? `<p class="small muted">Diubah ${fmtDT(k.diubah_pada)} oleh ${esc(k.diubah_oleh || '-')}.</p>` : ''}</div></div></section>`;
+}
+const kopForm = () => Object.fromEntries(new FormData(document.querySelector('form[data-form=kopSave]')).entries());
+inputHandlers.kopLive = () => { const d = kopForm(); document.getElementById('kopPrev').innerHTML = kopPreview({ ...KOP, ...d, logo: kopLogo ?? KOP.logo }); };
+changeHandlers.kopLogo = (el) => {
+  const f = el.files?.[0]; if (!f) return;
+  if (!/^image\/(png|jpe?g)$/.test(f.type)) { el.value = ''; return toast('Logo harus berkas PNG atau JPG.', 'warn'); }
+  if (f.size > 600 * 1024) { el.value = ''; return toast('Ukuran logo maksimal 600 KB.', 'warn'); }
+  const rd = new FileReader(); rd.onload = () => { kopLogo = rd.result; inputHandlers.kopLive(); }; rd.readAsDataURL(f);
+};
+forms.kopSave = async (d) => { delete d[''];
+  await api('/coord/kop', { method: 'PUT', body: { nama: d.nama, unit: d.unit, alamat: d.alamat, telepon: d.telepon, email: d.email, situs: d.situs, logo: kopLogo || null } }); toast('Kop dokumen disimpan. Dokumen PDF berikutnya memakai kop ini.'); rerender(); };
+actions.kopNoLogo = async () => { if (!(await confirmBox('Hapus logo kampus? Dokumen akan memakai logo PAN-JALU.', { ok: 'Hapus logo' }))) return; const d = kopForm(); await api('/coord/kop', { method: 'PUT', body: { ...d, logo: '' } }); toast('Logo dihapus.'); rerender(); };
+actions.kopReset = async () => { if (!(await confirmBox('Kembali memakai kop PAN-JALU untuk semua dokumen kampus ini?', { ok: 'Pakai kop PAN-JALU' }))) return; await api('/coord/kop', { method: 'DELETE' }); toast('Dokumen kembali memakai kop PAN-JALU.'); rerender(); };
+actions.kopSample = () => download('/coord/kop/contoh.pdf', 'contoh-kop-dokumen.pdf');
+
 async function coordProdi() {
-  const d = await api('/coord/prodi');
+  const [d, kop] = await Promise.all([api('/coord/prodi'), api('/coord/kop')]);
   const usulan = d.items.filter((p) => p.status === 'usulan'); const resmi = d.items.filter((p) => p.status !== 'usulan');
   const aktif = resmi.filter((p) => p.status === 'aktif');
   const fak = [...new Map(resmi.map((p) => [p.fakultas_kode, p.fakultas])).entries()];
   PRODI_LIST = d.items; JENJANG = d.jenjang;
-  return `<h1>Fakultas & Prodi</h1><p class="muted">Daftar fakultas dan program studi <b>${esc(d.universitas || '')}</b>. Daftar ini dipakai mahasiswa saat mendaftar, konselor saat mengatur konteks kerjanya, dan untuk filter laporan.</p>
+  return `<h1>Fakultas & Prodi</h1><p class="muted">Identitas kampus untuk dokumen, serta daftar fakultas dan program studi <b>${esc(d.universitas || '')}</b>. Fakultas dan prodi diisi bebas sesuai kampus Anda; daftar ini dipakai mahasiswa saat mendaftar, konselor saat mengatur konteks kerjanya, dan untuk filter laporan.</p>
+  ${kopCard(kop)}
   ${usulan.length ? `<section class="card alert-panel"><h3>Usulan dari mahasiswa (${usulan.length})</h3><p class="small">Prodi berikut diketik mahasiswa karena belum ada di daftar. Rapikan lalu setujui, atau gabungkan ke prodi yang sudah ada.</p>
     ${usulan.map((p) => `<div class="alert-row"><div><b>${esc(p.nama)}</b> <span class="chip">${esc(p.fakultas)}</span> <small class="muted">${p.mahasiswa} mahasiswa</small></div><div class="row wrap"><button class="btn primary sm" data-act="prodiEdit" data-id="${p.id}">Rapikan & setujui</button>${aktif.length ? `<button class="btn ghost sm" data-act="prodiMerge" data-id="${p.id}">Gabungkan</button>` : ''}</div></div>`).join('')}</section>` : ''}
   <div class="row between wrap"><span class="muted small">${fak.length} fakultas · ${aktif.length} prodi aktif</span><div class="row wrap"><button class="btn ghost" data-act="prodiBulk">Tempel dari Excel</button><button class="btn primary" data-act="prodiEdit">Tambah prodi</button></div></div>
@@ -1037,11 +1102,14 @@ actions.prodiEdit = (el) => {
   const fakNames = [...new Set(PRODI_LIST.filter((x) => x.status !== 'usulan').map((x) => x.fakultas))];
   openModal(`<h3>${el.dataset.id ? (p.status === 'usulan' ? 'Rapikan & setujui prodi' : 'Ubah prodi') : 'Tambah prodi'}</h3><form data-form="prodiSave" data-id="${el.dataset.id || ''}" class="form-grid">
     <label class="full">Nama program studi<input name="nama" value="${esc(p.nama)}" required minlength="3"></label>
-    <label>Fakultas<input name="fakultas" value="${esc(p.fakultas === 'Belum ditentukan' ? '' : p.fakultas)}" list="fakList" required minlength="3"><datalist id="fakList">${fakNames.map((f) => `<option value="${esc(f)}">`).join('')}</datalist></label>
-    <label>Kode fakultas (opsional)<input name="fakultas_kode" value="${esc(p.status === 'usulan' ? '' : p.fakultas_kode)}" placeholder="otomatis dari inisial"></label>
-    <label>Jenjang<select name="jenjang">${JENJANG.map((j) => `<option ${p.jenjang === j ? 'selected' : ''}>${j}</option>`).join('')}</select></label>
+    <label class="full">Fakultas (ketik bebas)<input name="fakultas" id="pf_fak" value="${esc(p.fakultas === 'Belum ditentukan' ? '' : p.fakultas)}" required minlength="3" maxlength="120" autocomplete="off" placeholder="mis. Fakultas Keguruan dan Ilmu Pendidikan"></label>
+    ${fakNames.length ? `<div class="full pick-chips"><small class="muted">Fakultas yang sudah ada (klik untuk memakai):</small>${fakNames.map((f) => `<button type="button" class="chip-btn sm" data-act="prodiFill" data-t="pf_fak" data-v="${esc(f)}">${esc(f)}</button>`).join('')}</div>` : ''}
+    <label>Kode fakultas (opsional)<input name="fakultas_kode" value="${esc(p.status === 'usulan' ? '' : p.fakultas_kode)}" maxlength="12" placeholder="otomatis dari inisial"></label>
+    <label>Jenjang (ketik bebas)<input name="jenjang" id="pf_jj" value="${esc(p.jenjang || 'S1')}" required maxlength="20" autocomplete="off"></label>
+    <div class="full pick-chips"><small class="muted">Jenjang umum:</small>${JENJANG.map((j) => `<button type="button" class="chip-btn sm" data-act="prodiFill" data-t="pf_jj" data-v="${esc(j)}">${esc(j)}</button>`).join('')}</div>
     <div class="row end full"><button class="btn primary" type="submit">Simpan</button></div></form>`);
 };
+actions.prodiFill = (el) => { const t = document.getElementById(el.dataset.t); t.value = el.dataset.v; t.focus(); };
 forms.prodiSave = async (d, f) => { const id = f.dataset.id; await api(id ? `/coord/prodi/${id}` : '/coord/prodi', { method: id ? 'PATCH' : 'POST', body: d }); closeModal(); toast('Program studi disimpan.'); rerender(); };
 actions.prodiToggle = async (el) => { await api(`/coord/prodi/${el.dataset.id}`, { method: 'PATCH', body: { status: el.dataset.s } }); rerender(); };
 actions.prodiMerge = (el) => { const p = PRODI_LIST.find((x) => x.id === el.dataset.id); openModal(`<h3>Gabungkan “${esc(p.nama)}”</h3><form data-form="prodiMerge" data-id="${p.id}" class="stack"><p class="small muted">${p.mahasiswa} mahasiswa dipindahkan ke prodi tujuan, lalu entri usulan ini dihapus.</p><label>Prodi tujuan<select name="ke" required>${PRODI_LIST.filter((x) => x.status === 'aktif').map((x) => `<option value="${x.id}">${esc(x.nama)} (${esc(x.jenjang)}) · ${esc(x.fakultas)}</option>`).join('')}</select></label><div class="row end"><button class="btn primary" type="submit">Gabungkan</button></div></form>`); };

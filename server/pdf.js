@@ -11,18 +11,25 @@ const fmt = (d) => new Date(d).toLocaleString('id-ID', { dateStyle: 'long', time
 function start(res, filename) {
   res.setHeader('Content-Type', 'application/pdf');
   res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-  const doc = new PDFDocument({ size: 'A4', margin: 48, bufferPages: true, info: { Title: filename, Author: 'PAN-JALU UNP Kediri' } });
+  const doc = new PDFDocument({ size: 'A4', margin: 48, bufferPages: true, info: { Title: filename, Author: 'PAN-JALU' } });
   doc.pipe(res);
   return doc;
 }
 
-function kop(doc, title, subtitle, kampus = 'UNIVERSITAS NUSANTARA PGRI KEDIRI') {
-  if (fs.existsSync(LOGO)) doc.image(LOGO, 48, 40, { width: 78 });
-  doc.font('Helvetica-Bold').fontSize(12).fillColor('#111').text(String(kampus).toUpperCase(), 140, 44, { width: 407 })
-    .font('Helvetica').fontSize(9).fillColor('#444').text('Unit Layanan Konseling — PAN-JALU', 140)
-    .text('Psikoedukasi, Asesmen, dan Navigasi Menuju Jiwa Luhur', 140);
-  doc.moveTo(48, 98).lineTo(547, 98).lineWidth(1.5).strokeColor(BLUE).stroke();
-  doc.y = 110; doc.x = 48;
+// brand: hasil branding.brandFor() — kop kampus (diatur koordinator) atau kop PAN-JALU
+function kop(doc, title, subtitle, brand) {
+  const b = brand || require('./branding').panjaluBrand();
+  const logo = b.logo || (fs.existsSync(LOGO) ? LOGO : null);
+  if (logo) { try { doc.image(logo, 48, 38, { fit: [78, 66], align: 'center', valign: 'center' }); } catch { /* logo rusak: dilewati */ } }
+  doc.font('Helvetica-Bold').fontSize(b.jenis === 'panjalu' ? 14 : 12).fillColor('#111').text(String(b.nama).toUpperCase(), 140, 40, { width: 407 })
+    .font('Helvetica').fontSize(9).fillColor('#333').text(b.unit, 140, doc.y, { width: 407 });
+  doc.fontSize(8).fillColor('#555');
+  if (b.sub) doc.text(b.sub, 140, doc.y, { width: 407 });
+  if (b.alamat) doc.text(b.alamat, 140, doc.y, { width: 407 });
+  if (b.kontak) doc.text(b.kontak, 140, doc.y, { width: 407 });
+  const lineY = Math.max(108, doc.y + 4);
+  doc.moveTo(48, lineY).lineTo(547, lineY).lineWidth(1.5).strokeColor(BLUE).stroke();
+  doc.y = lineY + 12; doc.x = 48;
   doc.font('Helvetica-Bold').fontSize(13).fillColor(BLUE).text(title, { align: 'center' });
   if (subtitle) doc.font('Helvetica').fontSize(9).fillColor('#555').text(subtitle, { align: 'center' });
   doc.moveDown(0.8).fillColor('#111');
@@ -95,10 +102,10 @@ function radarPdf(doc, data, { R = 92 } = {}) {
 
 const normDesc = (norm, kat) => NORMS[norm].batas.find((x) => x[1] === kat)?.[2] || '-';
 
-function assessmentReport(res, { student, prodi, a, previous = [] }) {
+function assessmentReport(res, { student, prodi, a, previous = [], brand, kampus }) {
   const doc = start(res, `laporan-ikdkm-m-${student.nim_nip}-${a.diisi_pada.slice(0, 10)}.pdf`);
-  kop(doc, 'LAPORAN HASIL ASESMEN IKDKM-M', 'Inventori Kebutuhan Dukungan Kekuatan Mental Mahasiswa');
-  kv(doc, [['Nama', student.nama], ['NIM', student.nim_nip], ['Program studi', prodi || '-'], ['Tanggal pengisian', fmt(a.diisi_pada)], ['Periode yang dinilai', '2 minggu terakhir']]);
+  kop(doc, 'LAPORAN HASIL ASESMEN IKDKM-M', 'Inventori Kebutuhan Dukungan Kekuatan Mental Mahasiswa', brand);
+  kv(doc, [['Nama', student.nama], ['NIM', student.nim_nip], ['Perguruan tinggi', kampus || '-'], ['Program studi', prodi || '-'], ['Tanggal pengisian', fmt(a.diisi_pada)], ['Periode yang dinilai', '2 minggu terakhir']]);
 
   h2(doc, 'Ringkasan skor');
   table(doc, ['Komponen', 'Skor', 'Rentang', 'Kategori', 'Makna'], [
@@ -162,16 +169,15 @@ function assessmentReport(res, { student, prodi, a, previous = [] }) {
   const label = { konten: 'Konten psikoedukasi', konseling: 'Konseling profesional', komunitas: 'Komunitas', peer: 'Konselor sebaya', workbook: 'Konten & Refleksi GURU', relaksasi: 'Ruang Mindfulness', lainnya: 'Lainnya' };
   table(doc, ['Jenis', 'Rekomendasi', 'Alasan / catatan', 'Sumber'], rekom.map((r) => [label[r.jenis], r.judul, r.alasan || '', r.sumber === 'konselor' ? `Konselor${r.oleh ? ` (${r.oleh})` : ''}` : 'Otomatis']), [90, 150, 184, 75]);
 
-  doc.moveDown(0.6).fontSize(8).fillColor('#555').text('IKDKM-M (sintesis konsep Kekuatan Mental William Glasser) bukan alat diagnosis klinis. Skor favorable SS=4…STS=1, unfavorable dibalik; kategori mengikuti norma BAB VI naskah instrumen. Dokumen ini memuat data pribadi spesifik (UU No. 27 Tahun 2022) dan hanya untuk pemilik data serta konselor berwenang.', { align: 'justify' });
   footer(doc, `Dicetak ${fmt(new Date())} · PAN-JALU`);
   doc.end();
 }
 
-function registrationForm(res, { form }) {
+function registrationForm(res, { form, brand, kampus }) {
   const doc = start(res, `formulir-pendaftaran-konseling-${form.nomor}.pdf`);
-  kop(doc, 'FORMULIR PENDAFTARAN KONSELING', `Nomor pendaftaran: ${form.nomor}`);
+  kop(doc, 'FORMULIR PENDAFTARAN KONSELING', `Nomor pendaftaran: ${form.nomor}`, brand);
   h2(doc, 'Data konseli');
-  kv(doc, [['Nama', form.nama], ['NIM', form.nim], ['Program studi', form.prodi], ['Email', form.email], ['Telepon', form.telepon || '-']]);
+  kv(doc, [['Nama', form.nama], ['NIM', form.nim], ['Perguruan tinggi', kampus || '-'], ['Program studi', form.prodi], ['Email', form.email], ['Telepon', form.telepon || '-']]);
   h2(doc, 'Layanan yang diajukan');
   kv(doc, [['Konselor', form.konselor], ['Jadwal', fmt(form.jadwal)], ['Jenis layanan', form.jenis_layanan], ['Mode', form.mode === 'online' ? 'Daring' : 'Luring'], ['Topik masalah', form.topik], ['Status', form.status]]);
   h2(doc, 'Keluhan / hal yang ingin dibicarakan');

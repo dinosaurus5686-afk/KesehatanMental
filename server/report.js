@@ -58,7 +58,7 @@ const STAGE = Object.fromEntries(COUNSELOR_GURU.map((g) => [g.kode, g]));
 
 function toPdf(res, d, filename) {
   const doc = pdfx.start(res, filename);
-  pdfx.kop(doc, d.judul, d.label);
+  pdfx.kop(doc, d.judul, d.label, d.brand);
   pdfx.kv(doc, [['Nama konselor', d.konselor], ['NIP', d.nip], ['Spesialisasi', d.spesialisasi]]);
   if (d.kpi) { pdfx.h2(doc, 'Indikator kinerja'); pdfx.table(doc, ['Indikator', 'Capaian'], kpiRows(d.kpi), [300, 199]); }
   pdfx.h2(doc, `Refleksi kinerja model GURU (${d.refleksi.length} kegiatan)`);
@@ -94,8 +94,7 @@ async function toDocx(d) {
     children: String(text ?? '-').split('\n').map((t) => new Paragraph({ children: [new TextRun({ text: t, bold: head, size: 19 })] })) });
   const table = (head, rows, widths) => new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, rows: [new TableRow({ tableHeader: true, children: head.map((h, i) => cell(h, true, widths[i])) }), ...rows.map((r) => new TableRow({ children: r.map((c, i) => cell(c, false, widths[i])) }))] });
   const children = [
-    new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: 'UNIVERSITAS NUSANTARA PGRI KEDIRI', bold: true, size: 26 })] }),
-    new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: 'Unit Layanan Konseling — PAN-JALU', size: 20 })] }),
+    ...require('./branding').docxKop(docx, d.brand),
     new Paragraph({ alignment: AlignmentType.CENTER, heading: HeadingLevel.HEADING_1, spacing: { before: 200 }, children: [new TextRun({ text: d.judul, bold: true, size: 26, color: '1D3A9E' })] }),
     new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 240 }, children: [new TextRun({ text: d.label, size: 20, color: '555555' })] }),
     p(`Nama konselor: ${d.konselor}`), p(`NIP: ${d.nip}`), p(`Spesialisasi: ${d.spesialisasi}`),

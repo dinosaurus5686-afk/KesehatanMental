@@ -63,10 +63,10 @@ r.get('/assessments/:id', (req, res) => {
 
 r.get('/assessments/:id/pdf', (req, res) => {
   const a = readableAssessment(req);
-  const s = get('SELECT u.*, p.nama_prodi FROM users u LEFT JOIN prodi p ON p.id = u.prodi_id WHERE u.id = ?', a.user_id);
+  const s = get('SELECT u.*, p.nama_prodi, v.nama AS kampus FROM users u LEFT JOIN prodi p ON p.id = u.prodi_id LEFT JOIN universities v ON v.id = u.university_id WHERE u.id = ?', a.user_id);
   const previous = all('SELECT diisi_pada, skor_total, kategori_total, skor_fondasi, skor_otot FROM assessments WHERE user_id = ? AND diisi_pada <= ? ORDER BY diisi_pada', a.user_id, a.diisi_pada);
   audit({ actor: req.user, aksi: 'unduh_laporan_asesmen', entitas: 'assessments', entitas_id: a.id, student_id: a.user_id, ip: req.ip });
-  pdf.assessmentReport(res, { student: s, prodi: s.nama_prodi, a: assessmentDetail(a, { konselor: req.user.role === 'konselor' }), previous });
+  pdf.assessmentReport(res, { student: s, prodi: s.nama_prodi, a: assessmentDetail(a, { konselor: req.user.role === 'konselor' }), previous, brand: require('../branding').brandFor(s.university_id), kampus: s.kampus });
 });
 
 // ---- Refleksi GURU: terintegrasi pada setiap konten psikoedukasi (internalisasi konten melalui refleksi) ----
@@ -102,8 +102,8 @@ r.get('/progress/me', student, (req, res) => res.json(require('../progress').pro
 // Raport Catatan Perkembangan: PDF atau Word
 r.get('/progress/me/report', student, async (req, res) => {
   const d = require('../progress').progressReport(req.user.id, str(req.query.bulan, 7));
-  const s = get('SELECT u.nama, u.nim_nip, p.nama_prodi, v.nama AS kampus FROM users u LEFT JOIN prodi p ON p.id = u.prodi_id LEFT JOIN universities v ON v.id = u.university_id WHERE u.id = ?', req.user.id);
-  d.mahasiswa = { nama: s.nama, nim: s.nim_nip, prodi: s.nama_prodi, kampus: s.kampus };
+  const s = get('SELECT u.nama, u.nim_nip, u.university_id, p.nama_prodi, v.nama AS kampus FROM users u LEFT JOIN prodi p ON p.id = u.prodi_id LEFT JOIN universities v ON v.id = u.university_id WHERE u.id = ?', req.user.id);
+  d.mahasiswa = { nama: s.nama, nim: s.nim_nip, prodi: s.nama_prodi, kampus: s.kampus }; d.brand = require('../branding').brandFor(s.university_id);
   const rpt = require('../progress-report'); const name = `catatan-perkembangan-${s.nim_nip}-${d.bulan}`;
   audit({ actor: req.user, aksi: `unduh_catatan_perkembangan_${req.query.format}`, entitas: 'users', entitas_id: req.user.id, student_id: req.user.id, alasan: d.bulan, ip: req.ip });
   if (req.query.format === 'docx') { res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'); res.setHeader('Content-Disposition', `attachment; filename="${name}.docx"`); return res.send(await rpt.toDocx(d)); }

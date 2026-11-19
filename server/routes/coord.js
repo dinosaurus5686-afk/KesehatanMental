@@ -87,13 +87,13 @@ r.post('/coord/alerts/:id/assign', coord, (req, res) => {
 // ---------- Fakultas & program studi kampus (dikelola koordinator) ----------
 const prodiWithCount = (uni) => all(`SELECT p.*, (SELECT COUNT(*) FROM users u WHERE u.prodi_id = p.id AND u.role = 'mahasiswa') AS mahasiswa FROM prodi p WHERE p.university_id = ?
   ORDER BY p.status = 'usulan' DESC, p.fakultas, p.nama_prodi`, uni).map((p) => ({ ...campus.prodiView(p), mahasiswa: p.mahasiswa }));
-const JENJANG = ['D3', 'D4', 'S1', 'S2', 'S3', 'Profesi'];
+const JENJANG = ['D1', 'D2', 'D3', 'D4', 'S1', 'S2', 'S3', 'Profesi', 'Spesialis']; // saran; jenjang lain boleh diketik sendiri
 function prodiFields(b) {
   const f = {};
   if ('nama' in b) { f.nama_prodi = str(b.nama, 120); if (f.nama_prodi.length < 3) fail(400, 'Isi nama program studi.'); }
   if ('fakultas' in b) { f.fakultas = str(b.fakultas, 120); if (f.fakultas.length < 3) fail(400, 'Isi nama fakultas.'); }
   if ('fakultas_kode' in b || f.fakultas) f.fakultas_kode = (str(b.fakultas_kode, 12) || campus.facultyCode(f.fakultas)).toUpperCase().replace(/[^A-Z0-9]/g, '');
-  if ('jenjang' in b) { if (!JENJANG.includes(b.jenjang)) fail(400, 'Jenjang tidak valid.'); f.jenjang = b.jenjang; }
+  if ('jenjang' in b) { f.jenjang = str(b.jenjang, 20); if (!f.jenjang) fail(400, 'Isi jenjang (mis. S1, D3, Profesi).'); }
   if ('status' in b) { if (!['aktif', 'nonaktif'].includes(b.status)) fail(400, 'Status tidak valid.'); f.status = b.status; }
   return f;
 }
@@ -115,7 +115,7 @@ r.post('/coord/prodi/bulk', coord, (req, res) => {
     for (const parts of lines) {
       const [fakultas, a, b, c] = parts;
       const [kode, nama, jenjang] = parts.length >= 3 ? [a, b, c] : ['', a, ''];
-      const f = prodiFields({ fakultas, fakultas_kode: kode || '', nama, jenjang: JENJANG.includes(jenjang) ? jenjang : 'S1' });
+      const f = prodiFields({ fakultas, fakultas_kode: kode || '', nama, jenjang: str(jenjang, 20) || 'S1' });
       if (get('SELECT 1 AS x FROM prodi WHERE university_id = ? AND lower(nama_prodi) = lower(?) AND jenjang = ?', req.user.university_id, f.nama_prodi, f.jenjang)) { skipped++; continue; }
       insert('prodi', { ...f, university_id: req.user.university_id, status: 'aktif' }); added++;
     }
@@ -145,6 +145,27 @@ r.post('/coord/prodi/:id/merge', coord, (req, res) => {
   });
   audit({ actor: req.user, aksi: 'gabung_prodi', entitas: 'prodi', entitas_id: target.id, alasan: `${p.nama_prodi} → ${target.nama_prodi} (${moved} mahasiswa)`, ip: req.ip });
   res.json({ dipindahkan: moved });
+});
+
+// ---- Kop dokumen kampus (dipakai di seluruh PDF/Word koordinator, konselor, dan mahasiswa kampus ini) ----
+const branding = require('../branding');
+r.get('/coord/kop', coord, (req, res) => res.json(branding.kopView(req.user.university_id)));
+r.put('/coord/kop', coord, (req, res) => {
+  const out = branding.saveKop(req.user.university_id, req.body || {}, req.user); if (out.error) fail(400, out.error);
+  audit({ actor: req.user, aksi: 'kop_dokumen_diubah', entitas: 'universities', entitas_id: req.user.university_id, alasan: str(req.body?.nama, 160), ip: req.ip });
+  res.json(branding.kopView(req.user.university_id));
+});
+r.delete('/coord/kop', coord, (req, res) => {
+  branding.resetKop(req.user.university_id);
+  audit({ actor: req.user, aksi: 'kop_dokumen_bawaan', entitas: 'universities', entitas_id: req.user.university_id, ip: req.ip });
+  res.json(branding.kopView(req.user.university_id));
+});
+// Contoh PDF untuk memeriksa tampilan kop
+r.get('/coord/kop/contoh.pdf', coord, (req, res) => {
+  const pdfx = require('../pdf'); const doc = pdfx.start(res, 'contoh-kop-dokumen.pdf');
+  pdfx.kop(doc, 'CONTOH KOP DOKUMEN', 'Tampilan ini dipakai pada laporan, formulir, dan raport PDF kampus Anda', branding.brandFor(req.user.university_id));
+  pdfx.kv(doc, [['Nama', 'Nama Mahasiswa'], ['NIM', '0000000000'], ['Perguruan tinggi', campus.universityName(req.user.university_id) || '-'], ['Program studi', 'Program Studi Contoh']]);
+  pdfx.footer(doc, 'Contoh · PAN-JALU'); doc.end();
 });
 
 module.exports = r;

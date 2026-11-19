@@ -24,7 +24,6 @@ function rows(d) {
   };
 }
 const JUDUL = 'CATATAN PERKEMBANGAN KEKUATAN MENTAL';
-const CATATAN = 'Catatan ini membantu memantau diri, bukan pengganti layanan kesehatan mental profesional. Bila merasa sangat terbebani, daftar konseling melalui PAN-JALU.';
 
 // Kisi titik kebiasaan harian (seperti di Beranda)
 function habitGrid(doc, d) {
@@ -54,7 +53,7 @@ function habitGrid(doc, d) {
 
 function toPdf(res, d, filename) {
   const doc = pdfx.start(res, filename); const t = rows(d);
-  pdfx.kop(doc, JUDUL, `Periode ${d.label}`, d.mahasiswa.kampus || undefined);
+  pdfx.kop(doc, JUDUL, `Periode ${d.label}`, d.brand);
   pdfx.table(doc, ['Data', 'Keterangan'], t.identitas, [150, 349]);
   pdfx.h2(doc, `Pelacak Kebiasaan Harian · ${d.label}`); habitGrid(doc, d);
   pdfx.h2(doc, 'Indikator Kekuatan Mental');
@@ -74,8 +73,6 @@ function toPdf(res, d, filename) {
   pdfx.h2(doc, `Hasil Bulan ${d.label}`);
   const pairs = []; for (let i = 0; i < t.hasil.length; i += 2) pairs.push([...t.hasil[i], ...(t.hasil[i + 1] || ['', ''])]);
   pdfx.table(doc, ['Capaian', 'Jumlah', 'Capaian', 'Jumlah'], pairs, [165, 85, 165, 84]);
-  pdfx.ensure(doc, 40);
-  doc.moveDown(0.5).font('Helvetica-Oblique').fontSize(8).fillColor('#555').text(`${CATATAN} Disusun otomatis dari rekam jejak di PAN-JALU (bukan AI).`).fillColor('#111');
   pdfx.footer(doc, `Dicetak ${fmtD(new Date())} · PAN-JALU`);
   doc.end();
 }
@@ -89,8 +86,7 @@ async function toDocx(d) {
     children: String(text ?? '-').split('\n').map((x) => new Paragraph({ children: [new TextRun({ text: x, bold: head, size: 19 })] })) });
   const table = (head, body, widths) => new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, rows: [new TableRow({ tableHeader: true, children: head.map((x, i) => cell(x, true, widths[i])) }), ...body.map((r) => new TableRow({ children: r.map((c, i) => cell(c, false, widths[i])) }))] });
   const children = [
-    new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: String(d.mahasiswa.kampus || 'Universitas Nusantara PGRI Kediri').toUpperCase(), bold: true, size: 26 })] }),
-    new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: 'Unit Layanan Konseling — PAN-JALU', size: 20 })] }),
+    ...require('./branding').docxKop(docx, d.brand),
     new Paragraph({ alignment: AlignmentType.CENTER, heading: HeadingLevel.HEADING_1, spacing: { before: 200 }, children: [new TextRun({ text: JUDUL, bold: true, size: 28, color: '1D3A9E' })] }),
     new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 240 }, children: [new TextRun({ text: `Periode ${d.label}`, size: 20, color: '555555' })] }),
     table(['Data', 'Keterangan'], t.identitas, [30, 70]),
@@ -106,7 +102,6 @@ async function toDocx(d) {
     h2('Dibanding Bulan Lalu'), table(['Fitur', d.banding.bulan_lalu, d.label, 'Perubahan'], t.banding, [40, 21, 21, 18]),
     h2('Goals SMART & Hasilnya'), t.goals.length ? table(['Goal / komitmen', 'Minggu', 'Hasil'], t.goals, [64, 18, 18]) : p('Belum ada goal pada bulan ini.'),
     h2(`Hasil Bulan ${d.label}`), table(['Capaian', 'Jumlah'], t.hasil, [60, 40]),
-    new Paragraph({ spacing: { before: 300 }, children: [new TextRun({ text: `${CATATAN} Disusun otomatis dari rekam jejak di PAN-JALU (bukan AI).`, italics: true, size: 17, color: '555555' })] }),
     new Paragraph({ children: [new TextRun({ text: `Dicetak ${fmtD(new Date())} · PAN-JALU`, size: 16, color: '777777' })] }),
   ];
   return Packer.toBuffer(new Document({ creator: 'PAN-JALU', title: JUDUL, styles: { default: { document: { run: { font: 'Calibri', size: 21 } } } }, sections: [{ children }] }));

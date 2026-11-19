@@ -1068,3 +1068,51 @@ tr.dif-sig td { background: rgba(255, 170, 0, .09); }
 tr.on-row td { background: rgba(47, 85, 212, .07); font-weight: 600; }
 .rasch-view .wright .w-row { grid-template-columns: 3.2rem 1fr 2.4rem 1.4fr; gap: .35rem; }
 .table td.num { white-space: nowrap; }
+.pick-chips { display: flex; flex-wrap: wrap; gap: .3rem; align-items: center; margin-top: -.3rem; } .pick-chips small { width: 100%; } .chip-btn.sm { font-size: .76rem; padding: .25em .7em; }
+
+/* Kop dokumen kampus */
+.kop-grid { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 1.2rem; align-items: start; }
+@media (max-width: 900px) { .kop-grid { grid-template-columns: 1fr; } }
+.kop-prev { display: grid; grid-template-columns: 4.6rem 1fr; gap: .8rem; align-items: center; padding: 1rem; margin-top: .3rem; background: #fff; color: #111; border: 1px solid var(--line); border-bottom: 3px solid #1d3a9e; border-radius: 12px; }
+.kop-prev .kop-logo img { width: 4.6rem; height: 4.2rem; object-fit: contain; }
+.kop-prev b { display: block; font-size: .95rem; letter-spacing: .01em; }
+.kop-prev span { display: block; font-size: .82rem; color: #333; }
+.kop-prev small { display: block; font-size: .7rem; color: #555; line-height: 1.35; }
+
+/* Pesan: panel percakapan setinggi layar, daftar kontak & isi pesan bergulir sendiri, kotak kirim selalu terlihat */
+.msg-layout { grid-template-columns: 300px minmax(0, 1fr); height: clamp(420px, calc(100dvh - 18rem), 820px); min-height: 0; align-items: stretch; }
+.msg-layout > .card { min-height: 0; margin: 0; }
+.thread-list { display: grid; grid-template-rows: auto minmax(0, 1fr); gap: .5rem; padding: .8rem; overflow: hidden; }
+.thread-list .tl-head { display: grid; gap: .45rem; }
+.thread-list .tl-search { width: 100%; padding: .5rem .8rem; border-radius: 999px; }
+.thread-list .tl-items { overflow-y: auto; display: grid; gap: .2rem; align-content: start; margin: 0 -.3rem; padding: 0 .3rem; }
+.msg-thread { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: .65rem; align-items: center; text-align: left; border: 0; background: none; padding: .55rem .6rem; border-radius: 12px; cursor: pointer; font: inherit; color: var(--ink); transition: background .15s; }
+.msg-thread[hidden] { display: none; }
+.msg-thread:hover { background: var(--accent-soft); } .msg-thread.on { background: var(--accent-soft); box-shadow: inset 3px 0 0 var(--accent); }
+.msg-thread .mt-text { display: grid; min-width: 0; } .msg-thread .mt-text b { font-size: .88rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.msg-thread .mt-text small { color: var(--muted); font-size: .76rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.msg-thread .mt-badge { min-width: 1.35rem; height: 1.35rem; padding: 0 .4rem; border-radius: 999px; background: var(--crit, #e5484d); color: #fff; font: 700 .72rem/1.35rem var(--font); text-align: center; }
+.avatar.sm { width: 34px; height: 34px; font-size: .74rem; }
+.msg-layout .avatar { position: relative; } .msg-layout .avatar .status-dot { position: absolute; right: -1px; bottom: -1px; width: 10px; height: 10px; border: 2px solid var(--surface, #fff); }
+.conv { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; gap: 0; padding: 0; overflow: hidden; }
+.conv-head { display: flex; gap: .75rem; align-items: center; padding: .8rem 1.1rem; border-bottom: 1px solid var(--line); background: linear-gradient(90deg, var(--accent-soft), transparent); }
+.conv-head div { display: grid; } .conv-head small { color: var(--muted); font-size: .76rem; }
+.conv .bubbles { max-height: none; min-height: 0; padding: 1rem 1.1rem; gap: .45rem; background: radial-gradient(circle at 1px 1px, rgba(47, 85, 212, .07) 1px, transparent 0) 0 0 / 18px 18px; }
+.bubble { box-shadow: 0 1px 2px rgba(20, 30, 70, .06); } .bubble small { display: block; text-align: right; margin-top: .15rem; }
+.day-sep { display: flex; justify-content: center; margin: .5rem 0 .2rem; } .day-sep span { font-size: .72rem; color: var(--muted); background: var(--surface, #fff); border: 1px solid var(--line); padding: .15rem .7rem; border-radius: 999px; }
+.composer { display: flex; gap: .6rem; align-items: flex-end; padding: .75rem .9rem; border-top: 1px solid var(--line); background: var(--surface, #fff); }
+.composer textarea { flex: 1; min-width: 0; resize: none; border-radius: 18px; padding: .6rem 1rem; line-height: 1.35; max-height: 130px; }
+.composer .send-btn { border-radius: 999px; white-space: nowrap; }
+.conv-empty { display: grid; place-items: center; align-content: center; gap: .3rem; height: 100%; color: var(--muted); text-align: center; padding: 2rem; } .conv-empty span { font-size: 2.2rem; }
+@media (max-width: 760px) {
+  .msg-layout { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); height: max(430px, calc(100dvh - 20rem)); }
+  .thread-list { max-height: 150px; } .conv { min-height: 0; } .composer textarea::placeholder { font-size: .8rem; }
+}
+
+/* Pendaftaran mahasiswa kolektif */
+.imp-steps { margin: 0; padding-left: 1.2rem; display: grid; gap: .55rem; }
+.imp-steps li { display: grid; grid-template-columns: auto auto 1fr; gap: .2rem .6rem; align-items: center; } .imp-steps li small { grid-column: 1 / -1; color: var(--muted); }
+.file-btn { cursor: pointer; }
+.imp-sum { display: flex; flex-wrap: wrap; gap: .35rem; }
+.imp-table { max-height: 360px; overflow: auto; }
+tr.imp-err td { background: rgba(229, 72, 77, .07); }

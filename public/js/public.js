@@ -293,6 +293,22 @@ async function forgotView() {
     <p class="center small"><a href="#/masuk">Kembali ke halaman masuk</a></p>`);
 }
 forms.forgot = async (d) => { await api('/auth/forgot', { method: 'POST', body: d }); document.getElementById('fgNote').innerHTML = '<div class="notice info">Jika email tersebut terdaftar dan sudah terverifikasi, tautan atur ulang kata sandi telah dikirim. Tautan berlaku 30 menit.</div>'; };
+// Aktivasi akun yang didaftarkan konselor: buat kata sandi + setujui kebijakan privasi
+async function activateView({ token }) {
+  const h = homeCache || await home();
+  let inv; try { inv = await api(`/auth/activate/${encodeURIComponent(token)}`); } catch (e) { return authShell(h, 'Aktivasi akun', '', `<div class="notice warn">${esc(e.message)}</div><p class="center small"><a href="#/daftar/mahasiswa">Daftar sendiri</a> · <a href="#/masuk">Masuk</a></p>`); }
+  return authShell(h, 'Aktifkan akun PAN-JALU', `Halo <b>${esc(inv.nama)}</b>, akunmu didaftarkan oleh <b>${esc(inv.konselor)}</b> (${esc(inv.kampus || '')}).`, `
+    <div class="notice small">NIM <b class="mono">${esc(inv.nim)}</b> · ${esc(inv.email)}. Setelah aktif, kamu bisa masuk dengan NIM atau email ini.</div>
+    <form data-form="activate" data-token="${esc(token)}" class="stack"><label>Buat kata sandi<input id="ac_pw" name="password" type="password" minlength="8" required autocomplete="new-password" data-input="pwHint"></label>
+    <label>Ulangi kata sandi<input id="ac_pw2" name="password2" type="password" minlength="8" required autocomplete="new-password"></label><p class="small muted" id="pwHint">Minimal 8 karakter, memuat huruf dan angka.</p>
+    <label class="check"><input type="checkbox" name="persetujuan" value="1" required> Saya menyetujui kebijakan privasi PAN-JALU (versi ${esc(inv.versi_kebijakan)}): data saya diproses untuk layanan kesehatan mental kampus, dilindungi sesuai UU No. 27 Tahun 2022, dan dapat diakses hanya oleh pihak berwenang — termasuk <b>${esc(inv.konselor)}</b> sebagai konselor pendampingku. Konselor pendamping dapat kuganti kapan saja di menu Profil.</label>
+    <button class="btn primary block" type="submit">Aktifkan akun</button></form>`);
+}
+forms.activate = async (d, f) => {
+  if (d.password !== d.password2) return toast('Ulangan kata sandi tidak sama.', 'warn');
+  const r = await api('/auth/activate', { method: 'POST', body: { token: f.dataset.token, password: d.password, persetujuan: !!d.persetujuan } });
+  toast('Akun aktif. Silakan masuk.'); location.hash = '#/masuk'; setTimeout(() => { const i = document.getElementById('lg_id'); if (i) i.value = r.nim; }, 300);
+};
 async function resetView({ token }) {
   const h = homeCache || await home();
   return authShell(h, 'Buat kata sandi baru', '', `<form data-form="reset" data-token="${esc(token)}" class="stack"><label>Kata sandi baru<input id="rs_pw" name="password" type="password" minlength="8" required autocomplete="new-password"></label><label>Ulangi kata sandi<input id="rs_pw2" name="password2" type="password" minlength="8" required autocomplete="new-password"></label><button class="btn primary block" type="submit">Simpan kata sandi</button></form>`);
@@ -315,4 +331,5 @@ export const publicViews = {
   'verifikasi-gagal': { title: 'Verifikasi gagal', render: verifyFailView },
   'lupa-sandi': { title: 'Lupa kata sandi', render: forgotView, guestOnly: true },
   'reset/:token': { title: 'Atur ulang kata sandi', render: resetView },
+  'aktivasi/:token': { title: 'Aktivasi akun', render: activateView },
 };

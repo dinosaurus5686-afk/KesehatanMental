@@ -843,10 +843,22 @@ export async function messagesView(tabsHtml, { peopleLabel, people }) {
   MSG.with = sel;
   const conv = sel ? await api(`/messages/with/${sel}`) : [];
   state.onMessage = (m) => { if (m.sender_id === MSG.with) rerender(); };
-  return `${tabsHtml}<div class="msg-layout"><aside class="card thread-list"><small class="muted">${esc(peopleLabel)}</small>${all.map((t) => `<button class="thread ${t.user_id === sel ? 'on' : ''}" data-act="msgWith" data-id="${t.user_id}"><span class="status-dot ${t.online ? 'online' : ''}"></span><span><b>${esc(t.nama)}</b><small>${esc(t.cuplikan || 'Mulai percakapan')}</small></span>${t.belum_dibaca ? `<span class="badge">${t.belum_dibaca}</span>` : ''}</button>`).join('') || '<p class="muted">Belum ada kontak.</p>'}</aside>
-    <section class="card conv">${sel ? `<div class="bubbles" id="bubbles">${conv.map((m) => `<div class="bubble ${m.saya ? 'me' : ''}"><p>${esc(m.isi_teks)}</p><small>${fmtDT(m.dikirim_pada)}</small></div>`).join('') || '<p class="muted center">Belum ada pesan.</p>'}</div>
-      <form data-form="msgSend" class="row"><input id="msg_text" name="isi_teks" placeholder="Tulis pesan…" required autocomplete="off"><button class="btn primary" type="submit">Kirim</button></form>` : '<p class="muted">Pilih kontak.</p>'}</section></div>`;
+  const ini = (n) => esc(String(n || '?').split(/\s+/).map((w) => w[0]).slice(0, 2).join('').toUpperCase());
+  const cur = map.get(sel);
+  const dayLabel = (iso) => { const d = new Date(iso); const t = new Date(); const y = new Date(Date.now() - 86400000); const same = (a, b) => a.toDateString() === b.toDateString(); return same(d, t) ? 'Hari ini' : same(d, y) ? 'Kemarin' : d.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Asia/Jakarta' }); };
+  const time = (iso) => new Date(iso).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Jakarta' });
+  let lastDay = '';
+  const bubbles = conv.map((m) => { const dl = dayLabel(m.dikirim_pada); const sep = dl !== lastDay ? `<div class="day-sep"><span>${esc(dl)}</span></div>` : ''; lastDay = dl; return `${sep}<div class="bubble ${m.saya ? 'me' : ''}"><p>${esc(m.isi_teks)}</p><small>${time(m.dikirim_pada)}</small></div>`; }).join('');
+  return `${tabsHtml}<div class="msg-layout"><aside class="card thread-list"><div class="tl-head"><small class="muted">${esc(peopleLabel)} · ${all.length}</small>${all.length > 6 ? '<input type="search" class="tl-search" placeholder="Cari nama…" data-input="msgFilter" aria-label="Cari kontak">' : ''}</div>
+    <div class="tl-items" id="tlItems">${all.map((t) => `<button class="msg-thread ${t.user_id === sel ? 'on' : ''}" data-act="msgWith" data-id="${t.user_id}" data-n="${esc(String(t.nama).toLowerCase())}"><span class="avatar sm">${ini(t.nama)}<i class="status-dot ${t.online ? 'online' : ''}"></i></span><span class="mt-text"><b>${esc(t.nama)}</b><small>${esc(t.cuplikan || 'Mulai percakapan')}</small></span>${t.belum_dibaca ? `<span class="mt-badge">${t.belum_dibaca}</span>` : ''}</button>`).join('') || '<p class="muted small">Belum ada kontak.</p>'}</div></aside>
+    <section class="card conv">${sel ? `<header class="conv-head"><span class="avatar">${ini(cur?.nama)}<i class="status-dot ${cur?.online ? 'online' : ''}"></i></span><div><b>${esc(cur?.nama || '')}</b><small>${cur?.online ? 'Sedang daring' : 'Pesan tersimpan dan dibaca saat daring'}</small></div></header>
+      <div class="bubbles" id="bubbles">${bubbles || '<div class="conv-empty"><span>💬</span><p>Belum ada pesan. Sapa lebih dulu.</p></div>'}</div>
+      <form data-form="msgSend" class="composer"><textarea id="msg_text" name="isi_teks" rows="1" placeholder="Tulis pesan…" title="Enter = kirim · Shift+Enter = baris baru" required autocomplete="off" maxlength="4000"></textarea><button class="btn primary send-btn" type="submit" aria-label="Kirim pesan">Kirim <span aria-hidden="true">➤</span></button></form>` : '<div class="conv-empty"><span>💬</span><p>Pilih kontak di sebelah kiri untuk mulai berkirim pesan.</p></div>'}</section></div>`;
 }
+inputHandlers.msgFilter = (el) => { const q = el.value.trim().toLowerCase(); document.querySelectorAll('#tlItems .msg-thread').forEach((b) => { b.hidden = !!q && !b.dataset.n.includes(q); }); };
+// Enter mengirim pesan; Shift+Enter menambah baris; kotak tumbuh mengikuti isi (maks. 5 baris)
+document.addEventListener('keydown', (e) => { if (e.target.id === 'msg_text' && e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); e.target.form.requestSubmit(); } });
+document.addEventListener('input', (e) => { if (e.target.id === 'msg_text') { e.target.style.height = 'auto'; e.target.style.height = `${Math.min(e.target.scrollHeight, 130)}px`; } });
 export const MSG = { with: null };
 actions.msgWith = (el) => { MSG.with = el.dataset.id; rerender(); };
 forms.msgSend = async (d) => { await api('/messages', { method: 'POST', body: { receiver_id: MSG.with, isi_teks: d.isi_teks } }); await rerender(); document.getElementById('msg_text')?.focus(); };

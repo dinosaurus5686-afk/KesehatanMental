@@ -250,6 +250,32 @@ r.post('/auth/reset', rateLimit({ windowMs: 600000, max: 10 }), (req, res) => {
   res.json({ ok: true });
 });
 
+// ---------- Aktivasi akun mahasiswa yang didaftarkan kolektif oleh konselor ----------
+const inviteOf = (token) => {
+  const t = get("SELECT * FROM email_tokens WHERE tautan_hash = ? AND tujuan = 'reset'", sha256(str(token, 200)));
+  const u = t ? get("SELECT u.*, i.counselor_id FROM users u JOIN student_invites i ON i.user_id = u.id WHERE u.id = ?", t.user_id) : null;
+  if (!t || !u || t.used_at || t.expires_at < nowIso() || u.status !== 'menunggu_verifikasi') fail(400, 'Tautan aktivasi sudah tidak berlaku. Minta konselor Anda mengirim ulang undangan, atau daftar sendiri dengan NIM & email yang sama.');
+  return { t, u };
+};
+r.get('/auth/activate/:token', rateLimit({ windowMs: 600000, max: 30 }), (req, res) => {
+  const { u } = inviteOf(req.params.token);
+  res.json({ nama: u.nama, nim: u.nim_nip, email: u.email, kampus: campus.universityName(u.university_id), konselor: get('SELECT nama FROM users WHERE id = ?', u.counselor_id)?.nama || '-', versi_kebijakan: getConfig('versi_kebijakan', 'v1') });
+});
+r.post('/auth/activate', rateLimit({ windowMs: 600000, max: 10 }), (req, res) => {
+  const { t, u } = inviteOf(req.body?.token);
+  const pw = String(req.body?.password || ''); const err = strongPassword(pw); if (err) fail(400, err);
+  if (!req.body?.persetujuan) fail(400, 'Centang persetujuan kebijakan privasi untuk melanjutkan.');
+  tx(() => {
+    update('users', u.id, { password_hash: hashPassword(pw), status: 'aktif', aktif: 1, email_verified_at: nowIso(), token_version: u.token_version + 1 });
+    update('email_tokens', t.id, { used_at: nowIso() });
+    insert('consents', { user_id: u.id, jenis_consent: 'layanan_umum', disetujui_pada: nowIso(), versi_kebijakan: getConfig('versi_kebijakan', 'v1'), alamat_ip: req.ip });
+    insert('consents', { user_id: u.id, jenis_consent: 'akses_konselor_pendamping', disetujui_pada: nowIso(), versi_kebijakan: getConfig('versi_kebijakan', 'v1'), alamat_ip: req.ip });
+  });
+  require('./import').activateInvite(u, u);
+  audit({ actor: u, aksi: 'aktivasi_akun_undangan', entitas: 'users', entitas_id: u.id, ip: req.ip });
+  res.json({ ok: true, nim: u.nim_nip });
+});
+
 // ---------- Data publik ----------
 r.get('/public/config', (_req, res) => {
   res.json({

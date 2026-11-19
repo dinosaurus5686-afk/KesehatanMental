@@ -1,7 +1,6 @@
 // Aplikasi Konselor/Admin: dashboard, profil 360°, laporan komunal, AI, kinerja.
 const express = require('express');
 const ExcelJS = require('exceljs');
-const PDFDocument = require('pdfkit');
 const { all, get, run, insert, update, nowIso, audit, getConfig } = require('../db');
 const { enc, dec } = require('../security');
 const { fail, requireRole, str, rateLimit } = require('../http');
@@ -235,7 +234,7 @@ r.get('/reports/export', reporter, async (req, res) => {
   }
   if (req.query.format === 'pdf') {
     const doc = pdfx.start(res, `laporan-komunal-${stamp}.pdf`);
-    pdfx.kop(doc, 'LAPORAN KOMUNAL IKDKM-M', `Filter: ${label}${q.anon ? ' · identitas dianonimkan' : ''}`, d.kampus || undefined);
+    pdfx.kop(doc, 'LAPORAN KOMUNAL IKDKM-M', `Filter: ${label}${q.anon ? ' · identitas dianonimkan' : ''}`, require('../branding').brandFor(req.user.university_id));
     pdfx.kv(doc, [['Jumlah mahasiswa', d.jumlah_mahasiswa], ['Rata-rata 5 Kebutuhan Dasar (20–80)', d.rata_fondasi ?? '-'], ['Rata-rata Kendali Diri & Kebiasaan Baik (8–32)', d.rata_otot ?? '-'], ['Rata-rata Indeks Kekuatan Mental (28–112)', d.rata_total ?? '-'], ['Butuh bantuan segera', d.penanda.butuh_bantuan_segera]]);
     pdfx.h2(doc, 'Analisis utama: 5 Kebutuhan Dasar');
     if (d.jumlah_mahasiswa) pdfx.radarPdf(doc, d.kebutuhan.map((x) => ({ kode: x.kode, nama: x.nama, skor: Math.round(x.rata ?? 4), max: 16, status: (x.rata ?? 0) >= 13 ? 'Kuat' : (x.rata ?? 0) >= 8 ? 'Rentan' : 'Lemah' })).sort((a, b) => a.kode.localeCompare(b.kode)), { R: 78 });
@@ -254,18 +253,11 @@ r.get('/reports/export', reporter, async (req, res) => {
     pdfx.h2(doc, 'Rekomendasi program layanan');
     if (!d.rekomendasi_layanan.length) doc.text('Belum ada dimensi yang melemah.');
     d.rekomendasi_layanan.forEach((x) => doc.text(`• [${x.jenis}] ${x.judul} (dimensi ${x.dimensi}; ${x.jumlah} mahasiswa melemah)`));
-    doc.moveDown().fontSize(8).fillColor('#555').text('Dokumen ini memuat data pribadi spesifik (UU No. 27 Tahun 2022). Bagikan hanya kepada pihak berwenang. IKDKM-M bukan alat diagnosis klinis.');
     pdfx.footer(doc, `Dicetak ${new Date().toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' })} WIB · PAN-JALU`);
     doc.end(); return;
   }
   fail(400, 'Format ekspor harus xlsx atau pdf.');
 });
-
-function kop(doc, title) {
-  doc.font('Helvetica-Bold').fontSize(13).text('UNIVERSITAS NUSANTARA PGRI KEDIRI', { align: 'center' }).font('Helvetica').fontSize(10).text('Unit Layanan Konseling — PAN-JALU (Psikoedukasi, Asesmen, dan Navigasi Menuju Jiwa Luhur)', { align: 'center' });
-  doc.moveTo(50, doc.y + 6).lineTo(545, doc.y + 6).lineWidth(1.5).stroke().moveDown(1.2);
-  doc.font('Helvetica-Bold').fontSize(12).text(title, { align: 'center' }).font('Helvetica').moveDown();
-}
 
 // Bukti informed consent (PDF dari server)
 r.get('/consents/:id/pdf', clinical, (req, res) => {
@@ -273,10 +265,10 @@ r.get('/consents/:id/pdf', clinical, (req, res) => {
   guardStudent(req, c.user_id);
   const s = get('SELECT * FROM users WHERE id = ?', c.user_id);
   audit({ actor: req.user, aksi: 'unduh_bukti_consent', entitas: 'consents', entitas_id: c.id, student_id: s.id, ip: req.ip });
-  res.setHeader('Content-Type', 'application/pdf'); res.setHeader('Content-Disposition', `attachment; filename="bukti-consent-${c.id.slice(0, 8)}.pdf"`);
-  const doc = new PDFDocument({ size: 'A4', margin: 50 }); doc.pipe(res);
-  kop(doc, 'BUKTI PERSETUJUAN (INFORMED CONSENT)');
-  doc.fontSize(10).text(`Nama: ${s.nama}`).text(`NIM: ${s.nim_nip}`).text(`Jenis persetujuan: ${c.jenis_consent}`).text(`Disetujui pada: ${new Date(c.disetujui_pada).toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' })} WIB`).text(`Versi kebijakan: ${c.versi_kebijakan}`).text(`Alamat IP tercatat: ${c.alamat_ip || '-'}`).text(`ID rekaman: ${c.id}`).moveDown()
+  const doc = pdfx.start(res, `bukti-consent-${c.id.slice(0, 8)}.pdf`);
+  pdfx.kop(doc, 'BUKTI PERSETUJUAN (INFORMED CONSENT)', null, require('../branding').brandFor(s.university_id));
+  const kampusNama = get('SELECT nama FROM universities WHERE id = ?', s.university_id)?.nama || '-';
+  doc.fontSize(10).text(`Nama: ${s.nama}`).text(`NIM: ${s.nim_nip}`).text(`Perguruan tinggi: ${kampusNama}`).text(`Jenis persetujuan: ${c.jenis_consent}`).text(`Disetujui pada: ${new Date(c.disetujui_pada).toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' })} WIB`).text(`Versi kebijakan: ${c.versi_kebijakan}`).text(`Alamat IP tercatat: ${c.alamat_ip || '-'}`).text(`ID rekaman: ${c.id}`).moveDown()
     .text('Mahasiswa menyatakan memahami tujuan layanan, batas kerahasiaan (termasuk pengecualian bila ada risiko keselamatan diri atau orang lain), serta haknya untuk mengakses, memperbaiki, dan meminta penghapusan data sesuai UU No. 27 Tahun 2022 tentang Pelindungan Data Pribadi.', { align: 'justify' });
   doc.end();
 });
@@ -341,6 +333,7 @@ r.get('/performance/report', konselor, async (req, res) => {
   const period = req.query.period === 'kegiatan' ? 'kegiatan' : rpt.PERIODS[req.query.period] ? req.query.period : 'bulan';
   const d = rpt.reportData(req.user, { period, id: str(req.query.id, 60) });
   if (!d) fail(404, 'Refleksi kegiatan tidak ditemukan.');
+  d.brand = require('../branding').brandFor(req.user.university_id);
   const name = `raport-diri-${req.user.nim_nip}-${period}-${new Date().toISOString().slice(0, 10)}`;
   audit({ actor: req.user, aksi: `unduh_raport_diri_${req.query.format}`, entitas: 'counselor_reflections', alasan: period, ip: req.ip });
   if (req.query.format === 'pdf') return rpt.toPdf(res, d, `${name}.pdf`);

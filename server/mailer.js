@@ -47,6 +47,12 @@ const mails = {
     return send(to, 'Kode verifikasi email PAN-JALU', layout('Verifikasi email Anda', `<p>Halo ${esc(nama)},</p><p>Masukkan kode berikut di halaman verifikasi PAN-JALU:</p><p style="font-size:30px;font-weight:700;letter-spacing:6px;font-family:monospace">${kode}</p><p>Atau klik tombol di bawah ini:</p>${btn(link, 'Verifikasi email')}<p style="font-size:13px;color:#6a7598">Kode dan tautan berlaku 30 menit.</p>`),
       `Halo ${nama},\n\nKode verifikasi PAN-JALU: ${kode}\nAtau buka tautan: ${link}\n\nBerlaku 30 menit.`);
   },
+  // Akun mahasiswa didaftarkan kolektif oleh konselor: mahasiswa membuat kata sandi & menyetujui kebijakan privasi
+  undanganMahasiswa: (to, nama, konselor, kampus, token) => {
+    const link = `${appUrl()}/#/aktivasi/${token}`;
+    return send(to, 'Aktifkan akun PAN-JALU Anda', layout('Akun PAN-JALU Anda sudah disiapkan', `<p>Halo ${esc(nama)},</p><p>${esc(konselor)}, konselor di ${esc(kampus)}, telah mendaftarkan Anda di <b>PAN-JALU</b> — layanan kesehatan mental mahasiswa (asesmen kekuatan mental, psikoedukasi, jurnal, mindfulness, dan konseling).</p><p>Aktifkan akun dengan membuat kata sandi dan membaca kebijakan privasi:</p>${btn(link, 'Aktifkan akun')}<p style="font-size:13px;color:#6a7598">Tautan berlaku 14 hari. Masuk menggunakan NIM atau email ini. Abaikan email ini bila Anda tidak mengenal pendaftaran tersebut.</p>`),
+      `Halo ${nama},\n\n${konselor} (${kampus}) telah mendaftarkan Anda di PAN-JALU.\nAktifkan akun: ${link}\nBerlaku 14 hari.`);
+  },
   reset: (to, nama, token) => {
     const link = `${appUrl()}/#/reset/${token}`;
     return send(to, 'Atur ulang kata sandi PAN-JALU', layout('Atur ulang kata sandi', `<p>Halo ${esc(nama)},</p><p>Kami menerima permintaan untuk mengatur ulang kata sandi akun Anda.</p>${btn(link, 'Buat kata sandi baru')}<p style="font-size:13px;color:#6a7598">Tautan berlaku 30 menit. Abaikan email ini bila Anda tidak memintanya.</p>`),

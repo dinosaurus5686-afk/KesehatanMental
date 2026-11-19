@@ -94,6 +94,9 @@ CREATE TABLE IF NOT EXISTS coordinator_claims (${T}, user_id TEXT NOT NULL REFER
   ditinjau_oleh TEXT REFERENCES users(id), ditinjau_pada TEXT, catatan TEXT);
 CREATE INDEX IF NOT EXISTS ix_cclaim_user ON coordinator_claims(user_id, status);
 CREATE INDEX IF NOT EXISTS ix_cclaim_uni ON coordinator_claims(university_id, status);
+CREATE TABLE IF NOT EXISTS student_invites (${T}, user_id TEXT UNIQUE NOT NULL REFERENCES users(id) ON DELETE CASCADE, counselor_id TEXT NOT NULL REFERENCES users(id),
+  university_id TEXT, terkirim_pada TEXT, jumlah_kirim INTEGER NOT NULL DEFAULT 0, aktif_pada TEXT);
+CREATE INDEX IF NOT EXISTS ix_invite_c ON student_invites(counselor_id);
 CREATE TABLE IF NOT EXISTS panjalu_counselors (${T}, user_id TEXT UNIQUE NOT NULL REFERENCES users(id), alasan TEXT, independen INTEGER NOT NULL DEFAULT 0,
   status TEXT NOT NULL DEFAULT 'menunggu' CHECK (status IN ('menunggu','aktif','ditolak','dicabut','dilepas')),
   kapasitas INTEGER NOT NULL DEFAULT 50, ditinjau_oleh TEXT REFERENCES users(id), ditinjau_pada TEXT, catatan TEXT, diajukan_pada TEXT);
