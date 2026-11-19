@@ -63,6 +63,7 @@ function makeAnswers(rand, strength, need, extra = {}) {
 }
 
 function seedDemo() {
+  require('./campus').ensureUniversities(); // daftar PT diperlukan untuk responden demo lintas provinsi
   const pw = hashPassword(DEMO_PASSWORD);
   const prodiId = (nama) => get('SELECT id FROM prodi WHERE nama_prodi = ? AND university_id = ?', nama, UNP).id;
   const admin = insert('users', { role: 'admin', nim_nip: 'admin', nama: 'Admin PAN-JALU', email: 'admin@panjalu.local', password_hash: pw });

@@ -10,6 +10,7 @@ const DEFAULT = {
   norms: clone(NORMS), ambang: Object.fromEntries(Object.entries(WEAKNESS).map(([k, w]) => [k, w.ambang])),
   makna: Object.fromEntries(Object.entries(LIB).map(([k, l]) => [k, { ...l.makna, coba_kuat: l.coba.kuat, coba_lemah: l.coba.lemah }])),
   ringkasan: clone(SUMMARY),
+  teks: Object.fromEntries(ITEMS.map((it) => [it.no, { indikator: it.indikator, teks: it.teks }])),
 };
 // Butir penanda keselamatan tidak boleh dinonaktifkan (dipakai mendeteksi "butuh bantuan segera")
 const LOCKED = { 28: 'Penanda gejala emosi & fisik berat (deteksi butuh bantuan segera)', 32: 'Penanda keinginan dibantu konselor (deteksi butuh bantuan segera)' };
@@ -23,6 +24,8 @@ const activeItems = () => ITEMS.filter((it) => isActive(it.no));
 // Terapkan pengaturan ke objek referensi bersama (dipakai skoring, interpretasi, PDF, dan klien)
 function apply() {
   const s = settings();
+  // redaksi butir (indikator & pernyataan) yang diubah admin; nomor, dimensi, arah, dan kata kunci tidak berubah
+  for (const it of ITEMS) { const o = s.teks?.[it.no] || {}; const d = DEFAULT.teks[it.no]; it.indikator = o.indikator || d.indikator; it.teks = o.teks || d.teks; }
   for (const [k, def] of Object.entries(DEFAULT.norms)) {
     const o = s.norms?.[k];
     NORMS[k].batas = def.batas.map((b, i) => { const x = o?.batas?.[i]; return [x && Number.isFinite(Number(x[0])) ? Number(x[0]) : b[0], b[1], x?.[2] || b[2], ...(b.length > 3 ? [x?.[3] || b[3]] : [])]; });
@@ -59,6 +62,25 @@ function setItemActive(no, aktif, actor) {
   return { ok: true, nonaktif: [...off] };
 }
 
+// Ubah redaksi butir. Kosong/sama dengan bawaan = kembali ke bawaan.
+function setItemText(no, { indikator, teks } = {}, actor) {
+  no = Number(no); const it = ITEMS.find((x) => x.no === no); if (!it) return { error: 'Butir tidak ditemukan.' };
+  indikator = String(indikator ?? '').trim().replace(/\s+/g, ' '); teks = String(teks ?? '').trim().replace(/\s+/g, ' ');
+  const d = DEFAULT.teks[no];
+  if (indikator && (indikator.length < 3 || indikator.length > 120)) return { error: 'Indikator 3–120 karakter.' };
+  if (teks && (teks.length < 10 || teks.length > 300)) return { error: 'Pernyataan 10–300 karakter.' };
+  const s = settings(); const all = { ...(s.teks || {}) };
+  const o = { ...(indikator && indikator !== d.indikator ? { indikator } : {}), ...(teks && teks !== d.teks ? { teks } : {}) };
+  const before = { indikator: it.indikator, teks: it.teks };
+  if (Object.keys(o).length) all[no] = o; else delete all[no];
+  const after = { indikator: o.indikator || d.indikator, teks: o.teks || d.teks };
+  const what = [before.indikator !== after.indikator ? 'indikator' : null, before.teks !== after.teks ? 'pernyataan' : null].filter(Boolean);
+  if (!what.length) return { ok: true, berubah: false };
+  setConfig('instrumen', { ...s, teks: all, riwayat: log(actor, `Butir ${no}: ${what.join(' & ')} diubah${Object.keys(o).length ? '' : ' (kembali ke bawaan)'} — "${after.teks}"`) });
+  apply();
+  return { ok: true, berubah: true, sebelum: before, sesudah: after };
+}
+
 function validateNorms(norms) {
   for (const [k, def] of Object.entries(DEFAULT.norms)) {
     const b = norms?.[k]?.batas; if (!b) continue;
@@ -89,7 +111,8 @@ function saveInterpretation(body, actor) {
 function view() {
   const s = settings(); const off = disabledItems();
   return {
-    butir: ITEMS.map((it) => ({ no: it.no, bagian: it.bagian, dimensi: it.dimensi, arah: it.arah, indikator: it.indikator, teks: it.teks, aktif: !off.includes(it.no), terkunci: LOCKED[it.no] || null })),
+    butir: ITEMS.map((it) => ({ no: it.no, bagian: it.bagian, dimensi: it.dimensi, arah: it.arah, indikator: it.indikator, teks: it.teks, aktif: !off.includes(it.no), terkunci: LOCKED[it.no] || null,
+      diubah: !!s.teks?.[it.no], bawaan: DEFAULT.teks[it.no] })),
     norms: NORMS, ambang: Object.fromEntries(Object.entries(WEAKNESS).map(([k, w]) => [k, w.ambang])),
     makna: Object.fromEntries(Object.keys(LIB).map((k) => [k, { ...LIB[k].makna, coba_kuat: LIB[k].coba.kuat, coba_lemah: LIB[k].coba.lemah }])),
     ringkasan: SUMMARY, bawaan: DEFAULT, diubah: { norms: !!s.norms, ambang: !!s.ambang, makna: !!s.makna, ringkasan: !!s.ringkasan },
@@ -97,4 +120,4 @@ function view() {
   };
 }
 
-module.exports = { apply, activeItems, isActive, disabledItems, setItemActive, saveInterpretation, view, LOCKED, DEFAULT };
+module.exports = { apply, activeItems, isActive, disabledItems, setItemActive, setItemText, saveInterpretation, view, LOCKED, DEFAULT };

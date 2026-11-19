@@ -1057,3 +1057,14 @@ details.claim-card > summary { list-style: none; cursor: pointer; display: flex;
 details.claim-card > summary::-webkit-details-marker { display: none; }
 details.claim-card[open] > div { margin-top: .8rem; }
 details.claim-card .claim-ico { font-size: 1.4rem; width: 2.4rem; height: 2.4rem; }
+
+/* Psikometrik: unduh, Rasch lengkap, CFA */
+.dl-bar { display: flex; flex-wrap: wrap; gap: .4rem; align-items: center; justify-content: flex-end; margin: .2rem 0 .8rem; }
+.rasch-nav { margin-top: .6rem; }
+.rasch-view h4 { margin: 1rem 0 .4rem; }
+.wright .w-m { font-size: .72rem; color: var(--muted); min-width: 2.2rem; text-align: center; }
+.wright-pre { font: .72rem/1.25 ui-monospace, Consolas, monospace; background: var(--surface-2, #f4f6fc); border: 1px solid var(--line); border-radius: 10px; padding: .8rem; overflow-x: auto; white-space: pre; }
+tr.dif-sig td { background: rgba(255, 170, 0, .09); }
+tr.on-row td { background: rgba(47, 85, 212, .07); font-weight: 600; }
+.rasch-view .wright .w-row { grid-template-columns: 3.2rem 1fr 2.4rem 1.4fr; gap: .35rem; }
+.table td.num { white-space: nowrap; }

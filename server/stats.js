@@ -150,4 +150,63 @@ function rasch(X, { maxIter = 300, tol = 0.0005 } = {}) {
   };
 }
 
-module.exports = { round, sum, mean, variance, sd, median, mode, describe, pearson, alpha, spearmanBrown, rTable, alphaLabel, anova, fPValue, rasch };
+// ---- distribusi lain ----
+// p dua sisi uji t: I_{df/(df+t²)}(df/2, 1/2)
+const tPValue = (t, df) => (t === null || !Number.isFinite(t) || !(df > 0) ? null : ibeta(df / (df + t * t), df / 2, 0.5));
+// gamma tak lengkap teregularisasi bawah P(a, x)
+function gammaP(a, x) {
+  if (x <= 0) return 0;
+  if (x < a + 1) { let ap = a; let del = 1 / a; let s2 = del; for (let n = 0; n < 500; n++) { ap += 1; del *= x / ap; s2 += del; if (Math.abs(del) < Math.abs(s2) * 1e-14) break; } return s2 * Math.exp(-x + a * Math.log(x) - lgamma(a)); }
+  let b = x + 1 - a; let c = 1 / 1e-300; let d = 1 / b; let h = d;
+  for (let i = 1; i < 500; i++) { const an = -i * (i - a); b += 2; d = an * d + b; if (Math.abs(d) < 1e-300) d = 1e-300; c = b + an / c; if (Math.abs(c) < 1e-300) c = 1e-300; d = 1 / d; const del = d * c; h *= del; if (Math.abs(del - 1) < 1e-14) break; }
+  return 1 - Math.exp(-x + a * Math.log(x) - lgamma(a)) * h;
+}
+const chi2Cdf = (x, df) => (x <= 0 ? 0 : gammaP(df / 2, x / 2));
+const chi2PValue = (x, df) => (x === null || !Number.isFinite(x) || df < 1 ? null : 1 - chi2Cdf(x, df));
+// khi-kuadrat nonsentral (deret campuran Poisson), untuk selang kepercayaan RMSEA
+function ncChi2Cdf(x, df, lam) {
+  if (lam <= 0) return chi2Cdf(x, df);
+  const h = lam / 2; let total = 0; const j0 = Math.floor(h);
+  const pois = (j) => Math.exp(-h + j * Math.log(h) - lgamma(j + 1));
+  for (let j = j0; j < j0 + 2000; j++) { const t = pois(j) * chi2Cdf(x, df + 2 * j); total += t; if (t < 1e-12 && j > j0 + 5) break; }
+  for (let j = j0 - 1; j >= 0; j--) { const t = pois(j) * chi2Cdf(x, df + 2 * j); total += t; if (t < 1e-12) break; }
+  return Math.min(1, total);
+}
+const normP2 = (z) => (z === null || !Number.isFinite(z) ? null : 2 * (1 - 0.5 * (1 + erf(Math.abs(z) / Math.SQRT2))));
+function erf(x) { const t = 1 / (1 + 0.3275911 * Math.abs(x)); const y = 1 - (((((1.061405429 * t - 1.453152027) * t) + 1.421413741) * t - 0.284496736) * t + 0.254829592) * t * Math.exp(-x * x); return x >= 0 ? y : -y; }
+
+// ---- aljabar matriks kecil (array 2D) ----
+const zeros = (n, m = n) => Array.from({ length: n }, () => Array(m).fill(0));
+function cholesky(A) { const n = A.length; const L = zeros(n); for (let i = 0; i < n; i++) for (let j = 0; j <= i; j++) { let s2 = A[i][j]; for (let k = 0; k < j; k++) s2 -= L[i][k] * L[j][k]; if (i === j) { if (!(s2 > 1e-12)) return null; L[i][i] = Math.sqrt(s2); } else L[i][j] = s2 / L[j][j]; } return L; }
+function cholInverse(L) { const n = L.length; const Li = zeros(n); for (let i = 0; i < n; i++) { Li[i][i] = 1 / L[i][i]; for (let j = 0; j < i; j++) { let s2 = 0; for (let k = j; k < i; k++) s2 -= L[i][k] * Li[k][j]; Li[i][j] = s2 / L[i][i]; } } const inv = zeros(n); for (let i = 0; i < n; i++) for (let j = 0; j <= i; j++) { let s2 = 0; for (let k = i; k < n; k++) s2 += Li[k][i] * Li[k][j]; inv[i][j] = inv[j][i] = s2; } return inv; }
+const logDetChol = (L) => 2 * L.reduce((s2, r, i) => s2 + Math.log(r[i]), 0);
+function invert(A) { // Gauss-Jordan (untuk Hessian)
+  const n = A.length; const M = A.map((r, i) => [...r, ...Array.from({ length: n }, (_, j) => (i === j ? 1 : 0))]);
+  for (let c = 0; c < n; c++) { let piv = c; for (let r2 = c + 1; r2 < n; r2++) if (Math.abs(M[r2][c]) > Math.abs(M[piv][c])) piv = r2; if (Math.abs(M[piv][c]) < 1e-14) return null; [M[c], M[piv]] = [M[piv], M[c]]; const d = M[c][c]; for (let j = 0; j < 2 * n; j++) M[c][j] /= d; for (let r2 = 0; r2 < n; r2++) if (r2 !== c) { const f = M[r2][c]; if (f) for (let j = 0; j < 2 * n; j++) M[r2][j] -= f * M[c][j]; } }
+  return M.map((r) => r.slice(n));
+}
+// Nilai & vektor eigen matriks simetris (Jacobi), terurut menurun
+function eigenSym(A0) {
+  const n = A0.length; const A = A0.map((r) => [...r]); const V = zeros(n); for (let i = 0; i < n; i++) V[i][i] = 1;
+  for (let sweep = 0; sweep < 100; sweep++) {
+    let off = 0; for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) off += A[i][j] ** 2; if (off < 1e-20) break;
+    for (let p = 0; p < n; p++) for (let q = p + 1; q < n; q++) {
+      if (Math.abs(A[p][q]) < 1e-15) continue;
+      const th = (A[q][q] - A[p][p]) / (2 * A[p][q]); const t = Math.sign(th || 1) / (Math.abs(th) + Math.sqrt(th * th + 1)); const c = 1 / Math.sqrt(t * t + 1); const s2 = t * c;
+      for (let k = 0; k < n; k++) { const akp = A[k][p]; const akq = A[k][q]; A[k][p] = c * akp - s2 * akq; A[k][q] = s2 * akp + c * akq; }
+      for (let k = 0; k < n; k++) { const apk = A[p][k]; const aqk = A[q][k]; A[p][k] = c * apk - s2 * aqk; A[q][k] = s2 * apk + c * aqk; }
+      for (let k = 0; k < n; k++) { const vkp = V[k][p]; const vkq = V[k][q]; V[k][p] = c * vkp - s2 * vkq; V[k][q] = s2 * vkp + c * vkq; }
+    }
+  }
+  return Array.from({ length: n }, (_, i) => ({ value: A[i][i], vector: V.map((r) => r[i]) })).sort((a, b) => b.value - a.value);
+}
+function covMatrix(X) { const n = X.length; const p = X[0].length; const m = Array.from({ length: p }, (_, j) => mean(X.map((r) => r[j]))); const C = zeros(p); for (let i = 0; i < p; i++) for (let j = 0; j <= i; j++) { let s2 = 0; for (const r of X) s2 += (r[i] - m[i]) * (r[j] - m[j]); C[i][j] = C[j][i] = s2 / (n - 1); } return C; }
+// Uji t Welch dua kelompok dari rerata, SE, dan n
+function welch(m1, se1, n1, m2, se2, n2) {
+  const se = Math.sqrt(se1 * se1 + se2 * se2); if (!(se > 0)) return { kontras: round(m1 - m2, 2), se: null, t: null, df: null, p: null };
+  const t = (m1 - m2) / se; const df = (se1 ** 2 + se2 ** 2) ** 2 / ((n1 > 1 ? se1 ** 4 / (n1 - 1) : 0) + (n2 > 1 ? se2 ** 4 / (n2 - 1) : 0) || 1e-12);
+  return { kontras: round(m1 - m2, 2), se: round(se, 2), t: round(t, 2), df: Math.round(Math.min(df, 1e6)), p: round(tPValue(t, df), 4) };
+}
+
+module.exports = { round, sum, mean, variance, sd, median, mode, describe, pearson, alpha, spearmanBrown, rTable, alphaLabel, anova, fPValue, rasch,
+  ibeta, lgamma, tPValue, gammaP, chi2Cdf, chi2PValue, ncChi2Cdf, normP2, zeros, cholesky, cholInverse, logDetChol, invert, eigenSym, covMatrix, welch };
